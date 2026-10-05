@@ -143,7 +143,7 @@ Then open a new terminal **and restart Claude Code**. `copilot help environment`
 | Write allow | Planner: plans + docs. Reviewer: plans. Builders: anywhere in the repo | `<agent>.flags` |
 | Write deny | `.claude/`, `.github/agents/`, `.github/copilot/`, `.git/`, `AGENTS.md`, `CLAUDE.md` | `common.flags` |
 | Secrets | Provider and GitHub tokens are stripped from the agent's shell environment | `common.flags` (`--secret-env-vars`) |
-| Gateway | Fixed checks with timeouts; arguments must stay inside the repo (no absolute, `~` or `..` paths); read-only git views with validated refs; `requires-args` stops formatters running on the whole tree and `new-files-only` keeps them off existing files; `delete-scratch` removes only an untracked `TEST_ROOT/zz_*` probe; output over 200 lines is summarised, full log in `.work/gateway/` | `.github/copilot/scripts/<os>/gateway.*` |
+| Gateway | Fixed checks with timeouts; arguments must stay inside the repo (no absolute, `~` or `..` paths); read-only git views with validated refs; `requires-args` stops formatters running on the whole tree and `new-files-only` keeps them off existing files; `delete-scratch` removes only an untracked `TEST_ROOT/zz_*` probe; output over 200 lines or 16 KB is summarised, full log in `.work/gateway/` | `.github/copilot/scripts/<os>/gateway.*` |
 | Runner | Never passes `--allow-all-tools`; refuses an agent with no profile; refuses a profile containing allow-all or a rule that allows an interpreter (`bash`, `pwsh`, `python`, `node`…) | `.claude/scripts/<os>/run-agent.*` |
 
 These rules were verified against Copilot CLI's actual behaviour: unapproved tools are denied

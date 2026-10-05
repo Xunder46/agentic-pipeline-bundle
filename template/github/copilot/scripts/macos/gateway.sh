@@ -9,7 +9,7 @@
 #   .github/copilot/scripts/macos/gateway.sh git-show <ref> [--stat|--name-only|--name-status]
 #   .github/copilot/scripts/macos/gateway.sh delete-scratch <path>   removes an untracked probe file
 #
-# Output: a check that prints more than SUMMARY_OVER lines is saved whole under .work/gateway/ and
+# Output: a check that prints more than SUMMARY_OVER lines or SUMMARY_BYTES bytes is saved whole under .work/gateway/ and
 # shown as a summary (first lines, every line that looks like a failure, the last lines, and the
 # path of the full log). Every model request re-sends the agent's whole context, so a 40 KB lint
 # dump that the agent then re-reads in chunks costs far more than the check itself. A check with the
@@ -25,6 +25,7 @@ ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "gateway: not insi
 cd "$ROOT"
 CONF="$ROOT/.github/copilot/gateway.conf"
 SUMMARY_OVER=200
+SUMMARY_BYTES=16000   # long lines matter too: 196 lint notices are only ~200 lines but 37 KB
 # Untracked files whose path starts with this may be removed with delete-scratch (set by the installer).
 SCRATCH_PREFIX="{{SCRATCH_PREFIX}}"
 
@@ -74,7 +75,7 @@ list_checks() {
     printf "  %-14s %5ss  %s%s\n", $1, $2, $3, ($4 == "" ? "" : "  [" $4 "]") }'
   echo "Git views: git-status · git-diff [<ref>] [--stat|--name-only|--name-status|--cached] [-- <path>...] · git-log [<count>] [<ref>] · git-show <ref> [--stat|--name-only|--name-status]"
   echo "Cleanup: delete-scratch ${SCRATCH_PREFIX}<name> (an untracked probe file you created)"
-  echo "Output over $SUMMARY_OVER lines is summarised; the full log path is printed (read it with your file tool)."
+  echo "Output over $SUMMARY_OVER lines or $((SUMMARY_BYTES / 1000)) KB is summarised; the full log path is printed (read it with your file tool)."
 }
 
 git_diff() {
@@ -138,7 +139,7 @@ run_summarized() {
   find "$dir" -name '*.log' -mtime +0 -delete 2> /dev/null || true
   log="$dir/$name-$(date +%Y%m%d-%H%M%S)-$$.log"
   exec perl -e '
-    my ($secs, $log, $rel, $over) = splice(@ARGV, 0, 4); $| = 1;
+    my ($secs, $log, $rel, $over, $bytes) = splice(@ARGV, 0, 5); $| = 1;
     my $pid = fork(); die "fork: $!\n" unless defined $pid;
     if ($pid == 0) {
       setpgrp(0, 0);
@@ -150,21 +151,22 @@ run_summarized() {
     alarm $secs; waitpid($pid, 0); my $st = $?; alarm 0;
     open(my $fh, "<", $log); my @l = <$fh>; close $fh;
     my $cut = sub { my $s = shift; chomp $s; length($s) > 300 ? substr($s, 0, 300) . " ..." : $s };
-    if (@l <= $over) { print $cut->($_), "\n" for @l }
+    my $size = 0; $size += length($_) for @l;
+    if (@l <= $over && $size <= $bytes) { print $cut->($_), "\n" for @l }
     else {
       my $fail = qr/\b(error|errors|fail|failed|failure|failing|exception|panic|traceback|assert\w*|expected|actual|timed? ?out)\b|\[E\]|\xE2\x9C\x97/i;
       my @hits = grep { $l[$_] =~ $fail } 0 .. $#l;
       my $more = @hits > 120 ? @hits - 120 : 0; splice(@hits, 120) if $more;
       print "gateway: $ARGV[0] printed ", scalar(@l), " lines; full output: $rel\n";
-      print "--- first 5 lines\n"; print $cut->($_), "\n" for @l[0 .. 4];
+      print "--- first 5 lines\n"; print $cut->($_), "\n" for @l[0 .. ($#l < 4 ? $#l : 4)];
       print "--- lines that look like failures (", scalar(@hits) + $more, ")", ($more ? ", first 120" : ""), "\n";
       printf "%6d: %s\n", $_ + 1, $cut->($l[$_]) for @hits;
-      print "--- last 40 lines\n"; print $cut->($_), "\n" for @l[-40 .. -1];
+      print "--- last 40 lines\n"; print $cut->($_), "\n" for @l[($#l < 39 ? 0 : $#l - 39) .. $#l];
       print "--- full output: $rel (read it with your file tool, by line range)\n";
     }
     if ($timed_out) { print STDERR "gateway: TIMEOUT after ${secs}s: @ARGV\n"; exit 124 }
     exit(($st & 127) ? 128 + ($st & 127) : ($st >> 8));
-  ' "$secs" "$log" "${log#"$ROOT"/}" "$SUMMARY_OVER" "$@"
+  ' "$secs" "$log" "${log#"$ROOT"/}" "$SUMMARY_OVER" "$SUMMARY_BYTES" "$@"
 }
 
 run_check() {

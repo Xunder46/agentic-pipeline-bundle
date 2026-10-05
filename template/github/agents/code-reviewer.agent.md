@@ -22,7 +22,7 @@ file and a permission profile from `.github/copilot/permissions/`. In this mode:
   `{{GATEWAY}} git-status`, `git-diff [<ref>] [--stat|--name-only] [-- <paths>]`, `git-log [<n>]` and
   `git-show <ref> [--stat|--name-only]` are the read-only git views. Every other command, and any
   pipe, redirect, `cd`, `&&`/`;` chain or interpreter, is denied by policy. Run each check as its own
-  command. Output over 200 lines is saved under `.work/gateway/` and shown as a summary with the log's
+  command. Output over 200 lines or 16 KB is saved under `.work/gateway/` and shown as a summary with the log's
   path: read the log by line range with `view` only when the summary is not enough.
 - **Writes.** You may write in the plan's folder only (`<plan>.review.md`, and the plan's `## Feedback` pointer and verification notes): paths under `{{PLANS_ROOT}}/`. Everything else is denied.
 - **A denial is policy, not a glitch.** Never retry a denied command, in any spelling, and never look

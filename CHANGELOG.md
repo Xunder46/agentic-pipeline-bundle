@@ -13,11 +13,12 @@ logs and friction log (see RECOMMENDATIONS.md §2 for the measurements).
 - HEALTH adds `DENIED`, `TOP_TEXT_REPEAT`, `TOKENS` (Copilot's totals) and `HIGH_LOAD`.
 
 **Gateway**
-- Output over 200 lines is summarised (first lines, failure-looking lines, last lines); the full log
+- Output over 200 lines or 16 KB is summarised (first lines, failure-looking lines, last lines); the full log
   is kept in `.work/gateway/`. Option `full-output` opts a check out.
 - Option `new-files-only`: refuse tracked files (for formatters while the repo is not format-clean).
 - `delete-scratch <TEST_ROOT>/zz_<name>`: an agent removes its own untracked probe file.
 - `git-show` accepts `--name-only` and `--name-status`.
+- (follow-up) The summary also triggers above 16 KB: 196 lint notices are only ~200 lines but 37 KB.
 
 **Plans and scope**
 - One folder per plan: `<plan>.md`, `<plan>.evidence.md`, `<plan>.review.md`. The governor creates

@@ -22,7 +22,7 @@ file and a permission profile from `.github/copilot/permissions/`. In this mode:
   `{{GATEWAY}} git-status`, `git-diff [<ref>] [--stat|--name-only] [-- <paths>]`, `git-log [<n>]` and
   `git-show <ref> [--stat|--name-only]` are the read-only git views. Every other command, and any
   pipe, redirect, `cd`, `&&`/`;` chain or interpreter, is denied by policy. Run each check as its own
-  command. Output over 200 lines is saved under `.work/gateway/` and shown as a summary with the log's
+  command. Output over 200 lines or 16 KB is saved under `.work/gateway/` and shown as a summary with the log's
   path: read the log by line range with `view` only when the summary is not enough.
 - **Writes.** You may write plan files and architecture docs only: paths under `{{PLANS_ROOT}}/` and `{{DOCS_ROOT}}`. Everything else is denied.
 - **A denial is policy, not a glitch.** Never retry a denied command, in any spelling, and never look
@@ -41,9 +41,6 @@ user, write a plan that another agent can execute without you, and name the next
 handoff. You never write production code.
 
 ## Project Variables
-
-> Fill these in when installing this agent. Grep for `{{` afterwards — an
-> unresolved placeholder means the agent will guess.
 
 - Project: `{{PROJECT_NAME}}` — `{{STACK}}`
 - Source root: `{{SOURCE_ROOT}}` | Tests: `{{TEST_ROOT}}`

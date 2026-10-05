@@ -13,9 +13,6 @@ handoff. You never write production code.
 
 ## Project Variables
 
-> Fill these in when installing this agent. Grep for `{{` afterwards — an
-> unresolved placeholder means the agent will guess.
-
 - Project: `{{PROJECT_NAME}}` — `{{STACK}}`
 - Source root: `{{SOURCE_ROOT}}` | Tests: `{{TEST_ROOT}}`
 - Architecture docs: `{{DOCS_ROOT}}` (index at `{{DOCS_INDEX}}`)

@@ -57,7 +57,7 @@ an interpreter.
    Copilot agents can run. Add what your agents need (code generation, a formatter with
    `requires-args new-files-only`) through `GATEWAY_EXTRA`, never as a shell allow rule. Besides the
    checks and git views, the gateway offers `delete-scratch` (an agent removes its own untracked
-   `TEST_ROOT/zz_*` probe file) and summarises output over 200 lines, keeping the full log in
+   `TEST_ROOT/zz_*` probe file) and summarises output over 200 lines or 16 KB, keeping the full log in
    `.work/gateway/`.
 4. **Tune the scope budget** in `.github/copilot/pr-scope-budget.md` if your PRs are naturally larger
    or smaller; the `pr-scope-guard` skill applies it at each checkpoint.

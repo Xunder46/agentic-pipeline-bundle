@@ -13,7 +13,7 @@ The ONLY shell command Copilot agents may run on Windows (allowed by
 Runs a fixed menu, with every argument checked to stay inside the repository. Exit status: the
 check's own; 124 on timeout; 2 for a refused request.
 
-Output: a check that prints more than $SummaryOver lines is saved whole under .work/gateway/ and
+Output: a check that prints more than $SummaryOver lines or $SummaryBytes bytes is saved whole under .work/gateway/ and
 shown as a summary (first lines, every line that looks like a failure, the last lines, and the path
 of the full log). Every model request re-sends the agent's whole context, so a 40 KB lint dump that
 the agent then re-reads in chunks costs far more than the check itself. A check with the
@@ -29,6 +29,7 @@ if (-not $root) { [Console]::Error.WriteLine('gateway: not inside a git reposito
 Set-Location $root
 $conf = Join-Path $root '.github/copilot/gateway.conf'
 $SummaryOver = 200
+$SummaryBytes = 16000   # long lines matter too: 196 lint notices are only ~200 lines but 37 KB
 # Untracked files whose path starts with this may be removed with delete-scratch (set by the installer).
 $ScratchPrefix = '{{SCRATCH_PREFIX}}'
 
@@ -69,7 +70,7 @@ function Show-List {
   }
   'Git views: git-status · git-diff [<ref>] [--stat|--name-only|--name-status|--cached] [-- <path>...] · git-log [<count>] [<ref>] · git-show <ref> [--stat|--name-only|--name-status]'
   "Cleanup: delete-scratch ${ScratchPrefix}<name> (an untracked probe file you created)"
-  "Output over $SummaryOver lines is summarised; the full log path is printed (read it with your file tool)."
+  "Output over $SummaryOver lines or $([int]($SummaryBytes / 1000)) KB is summarised; the full log path is printed (read it with your file tool)."
 }
 
 function Format-Arg([string]$a) {
@@ -82,17 +83,18 @@ function Format-Arg([string]$a) {
 function Write-CheckOutput([string]$exe, [string]$log) {
   $l = @(Get-Content -Path $log -Encoding UTF8 -ErrorAction SilentlyContinue)
   $cut = { param($s) if ($s.Length -gt 300) { $s.Substring(0, 300) + ' ...' } else { $s } }
-  if ($l.Count -le $SummaryOver) { $l | ForEach-Object { & $cut $_ }; return }
+  $size = ($l | Measure-Object -Property Length -Sum).Sum + $l.Count
+  if ($l.Count -le $SummaryOver -and $size -le $SummaryBytes) { $l | ForEach-Object { & $cut $_ }; return }
   $rel = $log.Substring($root.Length).TrimStart('\', '/') -replace '\\', '/'
   $fail = '(?i)\b(error|errors|fail|failed|failure|failing|exception|panic|traceback|assert\w*|expected|actual|timed? ?out)\b|\[E\]|' + [char]0x2717
   $hits = @(0..($l.Count - 1) | Where-Object { $l[$_] -match $fail })
   "gateway: $exe printed $($l.Count) lines; full output: $rel"
-  '--- first 5 lines'; $l[0..4] | ForEach-Object { & $cut $_ }
+  '--- first 5 lines'; $l[0..([Math]::Min(4, $l.Count - 1))] | ForEach-Object { & $cut $_ }
   $shown = @($hits | Select-Object -First 120)
   $note = if ($hits.Count -gt 120) { ', first 120' } else { '' }
   "--- lines that look like failures ($($hits.Count))$note"
   foreach ($i in $shown) { '{0,6}: {1}' -f ($i + 1), (& $cut $l[$i]) }
-  '--- last 40 lines'; $l[($l.Count - 40)..($l.Count - 1)] | ForEach-Object { & $cut $_ }
+  '--- last 40 lines'; $l[([Math]::Max(0, $l.Count - 40))..($l.Count - 1)] | ForEach-Object { & $cut $_ }
   "--- full output: $rel (read it with your file tool, by line range)"
 }
 
