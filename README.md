@@ -16,9 +16,9 @@ resolves from one config file. macOS/Linux and Windows are both supported.
             ▼                    ▼                      ▼
   Copilot --agent          Copilot --agent        Copilot --agent
   conductor-v2 (plan)  →   data-architect /   →   code-reviewer (verify)
-  writes: plans, docs      developer (build)      writes: plan file only
+  writes: plans, docs      developer (build)      writes: plan folder only
                            writes: repo code
-            └──────── all coordinate through {{PLANS_ROOT}}/<feature>-plan.md ────────┘
+            └──── all coordinate through {{PLANS_ROOT}}/<feature>-plan/<feature>-plan.md ────┘
 ```
 
 - **Two editions of every agent.** `.claude/agents/<name>.md` for Claude Code subagents, and
@@ -48,12 +48,14 @@ resolves from one config file. macOS/Linux and Windows are both supported.
 | `env/windows/copilot-provider.example.ps1` | The same for Windows |
 | `template/claude/agents/` | Claude Code editions: `conductor-v2` / `conductor` (planner), `data-architect`, `developer`, `code-reviewer` |
 | `template/claude/commands/` | `/feature` (governor), `/plan`, `/implement`, `/review`, `/resume`, `/run-pipeline`, `/retro` |
+| `template/claude/skills/pr-scope-guard/` | Applies the PR scope budget when a plan is written, after each phase and after review |
 | `template/claude/scripts/macos/`, `windows/` | The Copilot runner, timeout wrapper and OpenCode wrapper, per OS |
 | `template/claude/scripts/common/` | `opencode-proxy.mjs` (Node, both OSes) |
 | `template/claude/settings.json`, `pipeline.env` | Claude Code permissions; runner settings |
 | `template/github/agents/` | Copilot CLI editions of the same agents |
 | `template/github/copilot/permissions/` | Per-agent Copilot permission profiles (`common.flags` + one per agent) |
 | `template/github/copilot/gateway.conf` | The gateway's checks (generated from your config) |
+| `template/github/copilot/pr-scope-budget.md` | The PR scope budget: when a plan is too big, and how to split it |
 | `template/github/copilot/scripts/macos/`, `windows/` | The gateway, per OS |
 | `template/AGENTS.pipeline.md` | Project-facts block written into `AGENTS.md` (read by both tools) |
 | `template/docs/` | Skeletons for the conventions doc and architecture index (created only if absent) |
@@ -141,7 +143,7 @@ Then open a new terminal **and restart Claude Code**. `copilot help environment`
 | Write allow | Planner: plans + docs. Reviewer: plans. Builders: anywhere in the repo | `<agent>.flags` |
 | Write deny | `.claude/`, `.github/agents/`, `.github/copilot/`, `.git/`, `AGENTS.md`, `CLAUDE.md` | `common.flags` |
 | Secrets | Provider and GitHub tokens are stripped from the agent's shell environment | `common.flags` (`--secret-env-vars`) |
-| Gateway | Fixed checks with timeouts; arguments must stay inside the repo (no absolute, `~` or `..` paths); read-only git views with validated refs; `requires-args` stops formatters running on the whole tree | `.github/copilot/scripts/<os>/gateway.*` |
+| Gateway | Fixed checks with timeouts; arguments must stay inside the repo (no absolute, `~` or `..` paths); read-only git views with validated refs; `requires-args` stops formatters running on the whole tree and `new-files-only` keeps them off existing files; `delete-scratch` removes only an untracked `TEST_ROOT/zz_*` probe; output over 200 lines is summarised, full log in `.work/gateway/` | `.github/copilot/scripts/<os>/gateway.*` |
 | Runner | Never passes `--allow-all-tools`; refuses an agent with no profile; refuses a profile containing allow-all or a rule that allows an interpreter (`bash`, `pwsh`, `python`, `node`…) | `.claude/scripts/<os>/run-agent.*` |
 
 These rules were verified against Copilot CLI's actual behaviour: unapproved tools are denied
@@ -175,8 +177,8 @@ pwsh -NoProfile -File agentic-pipeline\install\windows\install.ps1 -Config my-pr
 The installer:
 1. Substitutes every `{{PLACEHOLDER}}` from the config (an empty value becomes "(not used in this
    project)" and agents skip rules about it) and **fails** if any placeholder survives.
-2. Copies both agent editions (only the planner you chose), the commands, your platform's scripts,
-   the permission profiles and the gateway. It refuses to overwrite a file you changed unless you pass
+2. Copies both agent editions (only the planner you chose), the commands, the `pr-scope-guard` skill,
+   your platform's scripts, the permission profiles, the gateway and the scope budget. It refuses to overwrite a file you changed unless you pass
    `--force` / `-Force`.
 3. Merges `.claude/settings.json`, writes a managed block into `AGENTS.md`, and adds `@AGENTS.md` to
    `CLAUDE.md`.
@@ -252,10 +254,13 @@ Artifacts: plans in your plans folder; briefs in `.work/<slug>/`; every run in `
 `<runner> stop <RUN_ID>` (stops the run and its process tree); the live output is in
 `.work/runs/<RUN_ID>/output.log`.
 
-HEALTH reports log and diff idle time, diff size, the most repeated agent action, model request and
-error counts (with the proxy), and hung child processes. The runner stops a run by itself on
-`MAX_RUN_MINUTES`, on `REPEAT_STOP` repeats of one action, or when the log and the diff are both idle
-for `STALL_MINUTES`. `STOP_REASON` says which.
+HEALTH reports log and diff idle time, diff size, the most repeated tool call, permission denials,
+the most repeated line of prose, model request and error counts (with the proxy), Copilot's token
+totals when a run ends, hung child processes, and a saturated machine. The runner stops a run by
+itself on `MAX_RUN_MINUTES` (`max_runtime`), on `REPEAT_STOP` repeats of one tool call (`loop`) or
+`REPEAT_STOP` denials (`denied`), on one line of prose repeated `max(200, 5 × REPEAT_STOP)` times
+(`filler`), or when the log and the diff are both idle for `STALL_MINUTES` (`stalled`). `STOP_REASON`
+says which.
 
 ---
 
@@ -275,6 +280,8 @@ for `STALL_MINUTES`. `STOP_REASON` says which.
 | Windows: `… cannot be loaded because running scripts is disabled` | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` |
 | Claude Code keeps asking permission for runner calls | `.claude/settings.json` wasn't merged; re-run the installer |
 | `install: unresolved placeholders remain` | A placeholder has no config key: add the key (even empty) to your config |
+| `STOP_REASON: denied` | The agent kept trying commands its profile denies: re-brief with what it was after, or add a gateway check if the need is real |
+| `STOP_REASON: filler` | The model degenerated into repeated text: re-run with a shorter, ordered brief (a smaller step) |
 
 ---
 

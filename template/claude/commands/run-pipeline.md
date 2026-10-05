@@ -8,7 +8,7 @@ request:
 
 $ARGUMENTS
 
-The shared plan file at `{{PLANS_ROOT}}/<feature>-plan.md` is the single source
+The shared plan file at `{{PLANS_ROOT}}/<feature>-plan/<feature>-plan.md` is the single source
 of truth. Every agent reads it and writes back to it. **Track the actual path
 the planner establishes** and make sure each later agent is given that same
 path — agents that invent their own plan path silently fork the pipeline.
@@ -27,6 +27,8 @@ reorder, do not run them in parallel.
   **Predicted Files**, and fixture-enumerated **Scenarios**. A plan missing
   these cannot be verified mechanically downstream. Send it back **once** with
   that reason rather than proceeding on an unverifiable plan.
+- Run the `pr-scope-guard` skill on the plan. Over budget → stop and report the
+  proposed split instead of building an oversized plan.
 
 ## 2. Data layer — `data-architect` subagent
 

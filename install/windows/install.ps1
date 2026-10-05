@@ -81,6 +81,9 @@ if ($Platform -eq 'windows') {
 $C['COPILOT_WRAPPER'] = $wrapper
 $C['PLANS_GLOB'] = $C['PLANS_ROOT'] + '/**'
 $C['DOCS_GLOB'] = $C['DOCS_ROOT'].TrimEnd('/') + '/**'
+# Probe files an agent may remove with `gateway delete-scratch`: untracked <test root>/zz_<name>.
+$testRoot = (Cfg 'TEST_ROOT').TrimEnd('/')
+$C['SCRATCH_PREFIX'] = if ($testRoot) { "$testRoot/zz_" } else { 'zz_' }
 foreach ($r in 'PLANNER', 'DEVELOPER', 'REVIEWER') { $C["${r}_MODEL_RAW"] = Cfg "${r}_MODEL" }
 
 # Gateway checks: lint/typecheck/test/build, then GATEWAY_EXTRA (name|seconds|command[|options]; ';').
@@ -120,11 +123,13 @@ try {
   Copy-Into (Join-Path $Template 'github/agents') (Join-Path $Stage '.github/agents')
   Copy-Into (Join-Path $Template 'github/copilot/permissions') (Join-Path $Stage '.github/copilot/permissions')
   Copy-Into (Join-Path $Template 'github/copilot/gateway.conf') (Join-Path $Stage '.github/copilot/gateway.conf')
+  Copy-Into (Join-Path $Template 'github/copilot/pr-scope-budget.md') (Join-Path $Stage '.github/copilot/pr-scope-budget.md')
   Copy-Into (Join-Path $Template "github/copilot/scripts/$Platform") (Join-Path $Stage ".github/copilot/scripts/$Platform")
   Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $Stage ".github/agents/$other.agent.md"), (Join-Path $Stage ".github/copilot/permissions/$other.flags")
   if (-not $Only) {
     Copy-Into (Join-Path $Template 'claude/agents') (Join-Path $Stage '.claude/agents')
     Copy-Into (Join-Path $Template 'claude/commands') (Join-Path $Stage '.claude/commands')
+    Copy-Into (Join-Path $Template 'claude/skills') (Join-Path $Stage '.claude/skills')
     Copy-Into (Join-Path $Template "claude/scripts/$Platform") (Join-Path $Stage ".claude/scripts/$Platform")
     Copy-Into (Join-Path $Template 'claude/scripts/common') (Join-Path $Stage '.claude/scripts/common')
     Copy-Into (Join-Path $Template 'claude/pipeline.env') (Join-Path $Stage '.claude/pipeline.env')
@@ -188,7 +193,7 @@ try {
   Say "Copilot agents, permission profiles and gateway -> .github/ (planner: $Planner)"
 
   if (-not $Only) {
-    Say 'Claude agents, commands, scripts and pipeline.env -> .claude/'
+    Say 'Claude agents, commands, skills, scripts and pipeline.env -> .claude/'
     $newSettings = Get-Content (Join-Path $Stage '.claude/settings.json') -Raw | ConvertFrom-Json
     if (-not (Test-Path '.claude/settings.json')) {
       Copy-Item (Join-Path $Stage '.claude/settings.json') '.claude/settings.json'

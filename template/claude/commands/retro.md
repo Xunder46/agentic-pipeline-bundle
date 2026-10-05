@@ -18,6 +18,10 @@ Scope: $ARGUMENTS (empty = every entry since the last `### … · RETRO` marker 
   mechanism, review misses, green-but-wrong, scope/format collateral, status drift, owner-check backlog,
   provider/runner failures.
 - For each group: count, total cost (minutes, fix rounds), and the entries' evidence IDs.
+- **Token cost.** Each finished run's log ends with Copilot's `Tokens` line, and `proxy.log` has one
+  line per model request. Rank the period's runs by requests and name the top five with their
+  causes: cost tracks the number of requests (each re-sends the whole context), so loops, re-reads of
+  the same file, long runs and open-ended briefs show up here first.
 
 ## 2. Propose — one change per cause, smallest that would have prevented it
 For each group, name the single file and the single change that would have stopped the most cost:

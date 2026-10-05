@@ -77,6 +77,8 @@ else
 fi
 PLANS_GLOB="$PLANS_ROOT/**"
 DOCS_GLOB="${DOCS_ROOT%/}/**"
+# Probe files an agent may remove with `gateway delete-scratch`: untracked <test root>/zz_<name>.
+if [[ -n ${TEST_ROOT-} ]]; then SCRATCH_PREFIX="${TEST_ROOT%/}/zz_"; else SCRATCH_PREFIX="zz_"; fi
 PLANNER_MODEL_RAW="${PLANNER_MODEL-}" DEVELOPER_MODEL_RAW="${DEVELOPER_MODEL-}" REVIEWER_MODEL_RAW="${REVIEWER_MODEL-}"
 
 # The gateway's checks: lint/typecheck/test/build from the config, then GATEWAY_EXTRA
@@ -126,14 +128,14 @@ OTHER_PLANNER=conductor; [[ $PLANNER_AGENT == conductor ]] && OTHER_PLANNER=cond
 mkdir -p "$STAGE/.github/copilot/scripts"
 cp -R "$TEMPLATE/github/agents" "$STAGE/.github/"
 cp -R "$TEMPLATE/github/copilot/permissions" "$STAGE/.github/copilot/"
-cp "$TEMPLATE/github/copilot/gateway.conf" "$STAGE/.github/copilot/"
+cp "$TEMPLATE/github/copilot/gateway.conf" "$TEMPLATE/github/copilot/pr-scope-budget.md" "$STAGE/.github/copilot/"
 cp -R "$TEMPLATE/github/copilot/scripts/$PLATFORM" "$STAGE/.github/copilot/scripts/"
 rm -f "$STAGE/.github/agents/$OTHER_PLANNER.agent.md" "$STAGE/.github/copilot/permissions/$OTHER_PLANNER.flags"
 
 # Claude Code part.
 if [[ -z $ONLY ]]; then
   mkdir -p "$STAGE/.claude/scripts"
-  cp -R "$TEMPLATE/claude/agents" "$TEMPLATE/claude/commands" "$STAGE/.claude/"
+  cp -R "$TEMPLATE/claude/agents" "$TEMPLATE/claude/commands" "$TEMPLATE/claude/skills" "$STAGE/.claude/"
   cp -R "$TEMPLATE/claude/scripts/$PLATFORM" "$TEMPLATE/claude/scripts/common" "$STAGE/.claude/scripts/"
   cp "$TEMPLATE/claude/pipeline.env" "$TEMPLATE/claude/settings.json" "$STAGE/.claude/"
   rm -f "$STAGE/.claude/agents/$OTHER_PLANNER.md"
@@ -198,7 +200,7 @@ for rel in $writes; do
   cp -p "$STAGE/$rel" "$rel"
 done
 say "Copilot agents, permission profiles and gateway → .github/ (planner: $PLANNER_AGENT)"
-[[ -n $ONLY ]] || say "Claude agents, commands, scripts and pipeline.env → .claude/"
+[[ -n $ONLY ]] || say "Claude agents, commands, skills, scripts and pipeline.env → .claude/"
 
 if [[ -z $ONLY ]]; then
   # settings.json: write, or merge (union of allow/deny; existing env values win).

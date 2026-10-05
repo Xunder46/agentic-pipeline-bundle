@@ -23,7 +23,7 @@ What to expect, and what to check before reporting back:
 - It presents the plan and names the next handoff. **Do not ask the user to
   approve the plan.** That gate is deliberately absent.
 
-Before reporting back, confirm the plan file at `{{PLANS_ROOT}}/<feature>-plan.md`
+Before reporting back, confirm the plan file at `{{PLANS_ROOT}}/<feature>-plan/<feature>-plan.md`
 exists and each phase carries:
 
 - [ ] **Done Criteria** — runnable commands, not prose
@@ -33,6 +33,9 @@ exists and each phase carries:
 
 A phase missing any of these cannot be verified mechanically downstream. Send it
 back **once** with that specific reason rather than accepting it.
+
+Then run the `pr-scope-guard` skill. An over-budget plan becomes an index plan plus
+the first PR's plan before anything is built.
 
 Report: the plan file path, the phase list with its owning agent, and the named
 next handoff.

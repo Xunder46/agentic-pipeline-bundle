@@ -17,14 +17,21 @@ file and a permission profile from `.github/copilot/permissions/`. In this mode:
   your final response), proceed on the defaults, and record them in the Assumption Log.
 - **Tools.** Read with `view`, search with `grep` and `glob`, change files with `create` and `edit`,
   track steps with `update_todo`. File tools only reach paths inside this repository.
-- **Shell: one command only — the gateway.** `{{GATEWAY}} list` shows the configured checks;
-  `{{GATEWAY}} <check> [args]` runs one with its timeout; `{{GATEWAY}} git-status`,
-  `git-diff [<ref>] [--stat|--name-only] [-- <paths>]`, `git-log [<n>]` and `git-show <ref> [--stat]`
-  are the read-only git views. Every other command, and any pipe, redirect, `&&`/`;` chain or
-  interpreter, is denied by policy. Run each check as its own command.
+- **Shell: one command only — the gateway**, spelled exactly `{{GATEWAY}}`. `{{GATEWAY}} list`
+  shows the configured checks; `{{GATEWAY}} <check> [args]` runs one with its timeout;
+  `{{GATEWAY}} git-status`, `git-diff [<ref>] [--stat|--name-only] [-- <paths>]`, `git-log [<n>]` and
+  `git-show <ref> [--stat|--name-only]` are the read-only git views. Every other command, and any
+  pipe, redirect, `cd`, `&&`/`;` chain or interpreter, is denied by policy. Run each check as its own
+  command. Output over 200 lines is saved under `.work/gateway/` and shown as a summary with the log's
+  path: read the log by line range with `view` only when the summary is not enough.
 - **Writes.** You may write plan files and architecture docs only: paths under `{{PLANS_ROOT}}/` and `{{DOCS_ROOT}}`. Everything else is denied.
-- **A denial is policy, not a glitch.** Never look for a workaround. Record what you needed and why
-  under `## Open questions`, then continue with what you can do, or stop and report.
+- **A denial is policy, not a glitch.** Never retry a denied command, in any spelling, and never look
+  for a workaround. Record what you needed and why under `## Open questions`, then continue with what
+  you can do, or stop and report.
+- **Every turn calls a tool.** Never write filler text between tool calls ("Let me read the file.");
+  if you have nothing left to do, write your final report. Do not re-read a file section you already
+  have unless you changed it: every request re-sends your whole context, so repeated reads are the
+  main cost of a run.
 - **Git belongs to the governor.** Never commit, push, reset or switch branches.
 - **Exit code 124** from the gateway means the check timed out: report it with its output; never
   re-run it unchanged. If a fix fails twice, stop and report.
@@ -42,7 +49,7 @@ handoff. You never write production code.
 - Source root: `{{SOURCE_ROOT}}` | Tests: `{{TEST_ROOT}}`
 - Architecture docs: `{{DOCS_ROOT}}` (index at `{{DOCS_INDEX}}`)
 - Standing conventions: `{{CONVENTIONS_DOC}}`
-- Plan files: `{{PLANS_ROOT}}/<feature>-plan.md`
+- Plan files: `{{PLANS_ROOT}}/<feature>-plan/<feature>-plan.md`
 - Verification commands: `{{GATEWAY}} lint`, `{{GATEWAY}} test`
 - Specialist agents: `@data-architect` (models, persistence, migrations, seed
   data), `@developer` (state, logic, UI, navigation, tests), `@code-reviewer`
@@ -168,8 +175,19 @@ scenario coverage appropriate to the size of the change is in the plan.
 
 ## Plan File Protocol
 
-Every feature has one plan file at `{{PLANS_ROOT}}/<feature>-plan.md`. It is the
+Every feature has one plan file at `{{PLANS_ROOT}}/<feature>-plan/<feature>-plan.md`. It is the
 single source of truth shared by every agent and every session.
+
+**Layout.** Every plan is a folder, `{{PLANS_ROOT}}/<feature>-plan/`, holding the
+plan, `<feature>-plan.evidence.md` (implementers' baselines, suite outputs and
+red→green tables) and `<feature>-plan.review.md` (the reviewer's findings). The
+plan keeps one-line Progress items and Assumption Log entries of at most 3 lines.
+Write files only at the paths your brief gives (the governor creates the folder;
+the create tool cannot make directories).
+
+**Size.** Stay within `.github/copilot/pr-scope-budget.md`. Over budget, write a
+short index plan plus the first PR's full plan instead. Do not measure or maintain
+line counts: the governor measures.
 
 **Read it first, always.** If it does not exist, create it from the structure
 below. If `## Feedback` exists and is non-empty, fold its contents into a new

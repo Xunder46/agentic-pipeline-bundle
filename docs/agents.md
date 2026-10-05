@@ -38,7 +38,7 @@ Set `PLANNER_AGENT` in your config. The installer copies only that planner.
 |---|---|---|---|
 | planner (`conductor-v2` / `conductor`) | view, grep, glob, create, edit, execute, update_todo | `PLANS_ROOT/**`, `DOCS_ROOT/**` | gateway only |
 | `data-architect`, `developer` | same | the whole repo except `.claude/`, `.github/agents/`, `.github/copilot/`, `.git/`, `AGENTS.md`, `CLAUDE.md` | gateway only |
-| `code-reviewer` | same | `PLANS_ROOT/**` (the plan's Feedback) | gateway only |
+| `code-reviewer` | same | `PLANS_ROOT/**` (the review file and the plan's Feedback) | gateway only |
 
 Profiles live in `.github/copilot/permissions/` (`common.flags` applies to every run). The runner
 refuses to start an agent without a profile, and refuses any profile that grants everything or allows
@@ -55,7 +55,12 @@ an interpreter.
    `--model` per role). Planning and review repay a stronger model.
 3. **Review the gateway checks** in `.github/copilot/gateway.conf`: they are the only commands
    Copilot agents can run. Add what your agents need (code generation, a formatter with
-   `requires-args`) through `GATEWAY_EXTRA`, never as a shell allow rule.
+   `requires-args new-files-only`) through `GATEWAY_EXTRA`, never as a shell allow rule. Besides the
+   checks and git views, the gateway offers `delete-scratch` (an agent removes its own untracked
+   `TEST_ROOT/zz_*` probe file) and summarises output over 200 lines, keeping the full log in
+   `.work/gateway/`.
+4. **Tune the scope budget** in `.github/copilot/pr-scope-budget.md` if your PRs are naturally larger
+   or smaller; the `pr-scope-guard` skill applies it at each checkpoint.
 
 ## Configuration keys
 
@@ -71,7 +76,7 @@ agents skip rules about it.
 | `STACK` * | Language, framework, main libraries | `TypeScript + React, Vitest` |
 | `BASE_BRANCH` * | Branch features start from and PRs target | `main` |
 | `SOURCE_ROOT` | Application source root | `src/` |
-| `TEST_ROOT` | Test root | `tests/` |
+| `TEST_ROOT` | Test root; agents' probe files are `TEST_ROOT/zz_*` (removable with `gateway delete-scratch`) | `tests/` |
 | `DOCS_ROOT` | Agent-facing architecture docs | `docs/architecture/` |
 | `DOCS_INDEX` | The index the planner reads first (skeleton created if absent) | `docs/architecture/README.md` |
 | `PLANS_ROOT` * | Plan files, no trailing slash | `docs/plans` |
@@ -103,7 +108,7 @@ agents skip rules about it.
 |---|---|---|
 | `PLANNER_AGENT` * | `conductor-v2` or `conductor` | — |
 | `PLATFORM` | `macos` (also Linux) or `windows`: which scripts are installed | `macos` (`windows` in install.ps1) |
-| `GATEWAY_EXTRA` | Extra gateway checks, `name\|seconds\|command[\|requires-args]` separated by `;` | empty |
+| `GATEWAY_EXTRA` | Extra gateway checks, `name\|seconds\|command[\|options]` separated by `;`; options: `requires-args`, `new-files-only`, `full-output` | empty |
 | `INVARIANT_CHECKS` | One line of markdown: the greps/commands every change must leave clean | none |
 | `LONG_CMD_TIMEOUT` | Seconds for installs, code generation and builds (`with-timeout.sh`) | `300` |
 | `TEST_TIMEOUT` | Seconds for the full test suite | `900` |
@@ -118,13 +123,17 @@ agents skip rules about it.
 | `WAIT_MINUTES` | Each `start`/`wait` call returns after this long | `15` |
 | `MAX_RUN_MINUTES` | Hard stop per run (0 = off) | `120` |
 | `STALL_MINUTES` | Stop when the log and the diff are both idle this long (0 = off) | `30` |
-| `REPEAT_STOP` | Stop when one agent action repeats this often (0 = off) | `40` |
+| `REPEAT_STOP` | Stop when one tool call repeats, or this many calls are denied; filler text stops at `max(200, 5×)` this (0 = off) | `40` |
 
 ## Conventions the agents share
 
-- **The plan file is the contract.** One markdown file per feature under `PLANS_ROOT`, read at the
-  start of every agent session and written back at the end. It carries requirements, decisions,
-  scenarios, phases, progress and feedback. Agents coordinate through it, not through chat history.
+- **The plan file is the contract.** One folder per plan under `PLANS_ROOT`, read at the start of every
+  agent session and written back at the end. The plan carries requirements, decisions, scenarios,
+  phases, one-line progress and feedback; `<plan>.evidence.md` holds suite outputs and red→green tables,
+  and `<plan>.review.md` the reviewer's findings, so the plan every agent re-reads stays short. Agents
+  coordinate through it, not through chat history.
+- **Scope budget.** A plan over budget (`.github/copilot/pr-scope-budget.md`) is split into PRs instead
+  of growing; the governor measures, planners never count lines.
 - **Stable IDs.** Decisions are `D-1, D-2 …` and scenarios `S-001, S-002 …`. Both are numbered across
   features, never reused, and referenced from code comments and test names.
 - **Verification is observed output, not inference.** Lint passing is not a test run. A completion

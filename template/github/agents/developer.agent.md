@@ -17,14 +17,21 @@ file and a permission profile from `.github/copilot/permissions/`. In this mode:
   your final response), proceed on the defaults, and record them in the Assumption Log.
 - **Tools.** Read with `view`, search with `grep` and `glob`, change files with `create` and `edit`,
   track steps with `update_todo`. File tools only reach paths inside this repository.
-- **Shell: one command only — the gateway.** `{{GATEWAY}} list` shows the configured checks;
-  `{{GATEWAY}} <check> [args]` runs one with its timeout; `{{GATEWAY}} git-status`,
-  `git-diff [<ref>] [--stat|--name-only] [-- <paths>]`, `git-log [<n>]` and `git-show <ref> [--stat]`
-  are the read-only git views. Every other command, and any pipe, redirect, `&&`/`;` chain or
-  interpreter, is denied by policy. Run each check as its own command.
+- **Shell: one command only — the gateway**, spelled exactly `{{GATEWAY}}`. `{{GATEWAY}} list`
+  shows the configured checks; `{{GATEWAY}} <check> [args]` runs one with its timeout;
+  `{{GATEWAY}} git-status`, `git-diff [<ref>] [--stat|--name-only] [-- <paths>]`, `git-log [<n>]` and
+  `git-show <ref> [--stat|--name-only]` are the read-only git views. Every other command, and any
+  pipe, redirect, `cd`, `&&`/`;` chain or interpreter, is denied by policy. Run each check as its own
+  command. Output over 200 lines is saved under `.work/gateway/` and shown as a summary with the log's
+  path: read the log by line range with `view` only when the summary is not enough.
 - **Writes.** You may write anywhere in the repository except `.claude/`, `.github/agents/`, `.github/copilot/`, `AGENTS.md`, `CLAUDE.md` and `.git/`. Everything else is denied.
-- **A denial is policy, not a glitch.** Never look for a workaround. Record what you needed and why
-  under `## Open questions`, then continue with what you can do, or stop and report.
+- **A denial is policy, not a glitch.** Never retry a denied command, in any spelling, and never look
+  for a workaround. Record what you needed and why under `## Open questions`, then continue with what
+  you can do, or stop and report.
+- **Every turn calls a tool.** Never write filler text between tool calls ("Let me read the file.");
+  if you have nothing left to do, write your final report. Do not re-read a file section you already
+  have unless you changed it: every request re-sends your whole context, so repeated reads are the
+  main cost of a run.
 - **Git belongs to the governor.** Never commit, push, reset or switch branches.
 - **Exit code 124** from the gateway means the check timed out: report it with its output; never
   re-run it unchanged. If a fix fails twice, stop and report.
@@ -42,7 +49,7 @@ the persistence **interface** and never on a concrete storage implementation.
 - Persistence interface: `{{DATA_INTERFACE}}` (test impl: `{{TEST_IMPL}}`)
 - Tests: `{{TEST_ROOT}}`
 - Docs: `{{DOCS_ROOT}}` | Conventions: `{{CONVENTIONS_DOC}}`
-- Plans: `{{PLANS_ROOT}}/<feature>-plan.md`
+- Plans: `{{PLANS_ROOT}}/<feature>-plan/<feature>-plan.md`
 - Commands: `{{GATEWAY}} lint`, `{{GATEWAY}} test`, `{{RUN_CMD}}`
 
 ## Scope
@@ -57,7 +64,7 @@ the persistence **interface** and never on a concrete storage implementation.
 
 ## Plan File Protocol
 
-`{{PLANS_ROOT}}/<feature>-plan.md` is the single source of truth.
+`{{PLANS_ROOT}}/<feature>-plan/<feature>-plan.md` is the single source of truth.
 
 **Read it before writing anything.** It carries the decisions that bind you, the
 scenario register you test against, this phase's Done Criteria, and the Predicted
@@ -71,6 +78,14 @@ handoff callout — not a silent local fix.
 
 **When you finish**, mark tasks `- [x]` under `## Progress` and set the phase to
 **Complete** or **Blocked**.
+
+Write evidence (baselines, suite outputs, red→green tables, footprints) to
+`<plan>.evidence.md` in the plan's folder. In the plan itself, tick the checkbox
+with a one-line result, and keep Assumption Log entries to 3 lines or fewer.
+If the phase uncovers substantial unplanned work (a missing prerequisite, a new
+model, message, screen or migration), do not absorb it: get the suites green,
+add at most 5 lines to the plan's Open Items, mark the phase **Blocked (scope)**,
+and stop.
 
 **If something cannot be implemented as planned**, add a `## Feedback` section
 describing what failed and why, mark the phase **Blocked**, stop, and tell the
@@ -195,7 +210,7 @@ reading.
 ## Workflow
 
 ### Step 0 — Read
-- [ ] `{{PLANS_ROOT}}/<feature>-plan.md` — decisions, scenarios, Done Criteria,
+- [ ] `{{PLANS_ROOT}}/<feature>-plan/<feature>-plan.md` — decisions, scenarios, Done Criteria,
       Predicted Files
 - [ ] `{{CONVENTIONS_DOC}}` — applicable rules
 - [ ] The one feature doc relevant to this change
@@ -236,6 +251,27 @@ Update only what the change made **false**, or what changed in **structure**,
 visual detail, values already defined in source, or copied code — reviewers
 reject those. Where behavior changed, delete the stale prose and point at the
 test that verifies the new behavior.
+
+## Edits, Probes and Tests
+
+Each rule here exists because breaking it cost a fix round or a lost run.
+
+- **Format only files you created.** The repository may not be format-clean, so formatting an
+  existing file rewrites lines your change never touched (one run turned a 4-line edit into a
+  400-line diff). In Copilot mode the gateway refuses tracked files.
+- **Edit existing files with minimal edits, then check the diff** (`git diff --stat`, or
+  `{{GATEWAY}} git-diff --stat` in Copilot mode). A diff bigger than your edit means undo and report.
+- **Create no scratch or probe files.** Print values from inside a test instead. If you did create one,
+  remove it before you finish (`{{GATEWAY}} delete-scratch <path>` in Copilot mode).
+- **No real-clock thresholds in tests** ("took under 20 ms"): bracket between recorded timestamps or
+  poll to a deadline. Wall-clock thresholds fail under load.
+- **Mutation checks:** record the original line in the evidence file, change it, see the test fail,
+  restore the EXACT original, re-run green. Never end a step with a mutation applied. If the real
+  fixture cannot tell the mutant apart, say so and stub only that input.
+- **An existing test goes red that the plan did not predict:** stop and report it. Do not edit
+  another feature's test to make your change pass.
+- **A step's text contradicts the plan's decisions:** follow the decisions and log it in the
+  Assumption Log.
 
 ## Verification Is Observed Output
 
@@ -314,7 +350,7 @@ Update the plan file first, then hand off to `@code-reviewer`:
 
 ### Files Changed
 - <paths — flag anything outside the plan's Predicted Files and say why>
-- {{PLANS_ROOT}}/<feature>-plan.md (Progress updated; phase Complete/Blocked)
+- {{PLANS_ROOT}}/<feature>-plan/<feature>-plan.md (Progress updated; phase Complete/Blocked)
 ```
 
 One line of prose is enough. Do not write a detailed narrative summary.

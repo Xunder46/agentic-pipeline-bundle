@@ -58,9 +58,13 @@ DEVELOPER_MODEL=""
 REVIEWER_MODEL=""
 
 # Extra gateway checks for Copilot agents (their only shell access), separated by ";":
-#   name|timeout seconds|command[|requires-args]   — requires-args = refuse to run without file
-#   arguments (use it for formatters, so they never run on the whole tree).
-GATEWAY_EXTRA="codegen|300|npm run codegen; format|120|npx prettier --write|requires-args"
+#   name|timeout seconds|command[|options]   options, space-separated:
+#     requires-args   refuse to run without file arguments (formatters never run on the whole tree)
+#     new-files-only  refuse files git already tracks (formatters, while the repo is not format-clean)
+#     full-output     never summarise the output (by default, output over 200 lines is summarised and
+#                     saved under .work/gateway/, which saves the agent re-reading it in chunks)
+# Drop new-files-only once the repo is format-clean (RECOMMENDATIONS.md §3.4).
+GATEWAY_EXTRA="codegen|300|npm run codegen; format|120|npx prettier --write|requires-args new-files-only"
 
 # ---- Runner (.claude/pipeline.env) ---------------------------------------------------------------
 COPILOT_WRAPPER=""          # "with-opencode.sh" for OpenCode Go/Zen (mapped to .ps1 on Windows); "" otherwise

@@ -202,19 +202,47 @@ function Start-Run([string]$agent, [string]$promptFile, [string]$model) {
 }
 
 # ---- Health --------------------------------------------------------------------------------------
-function Get-TopRepeat([string]$log) {
-  if (-not (Test-Path $log)) { return @(0, '-') }
-  $counts = @{}
+# Loop signals from the agent log (same rules as the macOS runner's log_stats):
+#   Action/ActionKey  the most repeated tool call. Copilot logs each call as "● <title>" ("✗ <title>"
+#                     when it failed or was denied) followed by "  │ <command or path>". The model
+#                     rewrites titles freely, so a shell call is keyed on its command and a read on its
+#                     path and line range; edits keep their title (many edits to one plan are normal).
+#   Denied            calls refused by the permission profile (each retry counts).
+#   Text              the most repeated prose line: a degenerating model writes the same filler line
+#                     thousands of times with no tool calls.
+function Get-LogStats([string]$log) {
+  $r = @{ Action = 0; ActionKey = '-'; Denied = 0; Text = 0 }
+  if (-not (Test-Path $log)) { return $r }
+  $dot = [string][char]0x25CF + ' '; $cross = [string][char]0x2717 + ' '
+  $bar = '  ' + [char]0x2502 + ' '; $corner = '  ' + [char]0x2514 + ' '
+  $act = @{}; $text = @{}; $key = ''; $kind = ''; $stage = 0
   foreach ($l in (Get-Content -Path $log -Encoding UTF8)) {
-    if (-not $l.StartsWith([string][char]0x25CF + ' ')) { continue }
-    $words = ($l.Substring(2).ToLowerInvariant() -replace '[0-9]+', '#') -split '\s+' | Where-Object { $_ -ne '' } | Select-Object -First 3
-    $key = $words -join ' '
-    if ($key) { $counts[$key] = 1 + [int]$counts[$key] }
+    if ($l.StartsWith($dot) -or $l.StartsWith($cross)) {
+      if ($key) { $act[$key] = 1 + [int]$act[$key] }
+      $t = (($l.Substring(2) -replace '\s+[0-9.]+m?s\s*$', '') -replace '\s+', ' ').Trim().ToLowerInvariant() -replace '[0-9]+', '#'
+      $kind = if ($t -match '\(shell\)$') { 'shell' } else { ($t -split ' ')[0] }
+      $key = $t; $stage = if ($kind -in 'edit', 'create') { 0 } else { 1 }
+      continue
+    }
+    if ($stage -eq 1 -and $l.StartsWith($bar)) { $key = $kind + ': ' + ($l.Substring(4) -replace '\s+', ' ').Trim(); $stage = 2; continue }
+    if ($stage -eq 2 -and $l.StartsWith($corner) -and $l.Substring(4) -match '^(L[0-9]+:[0-9]+)') { $key = $key + ' ' + $Matches[1]; $stage = 0; continue }
+    if ($l -match 'Permission denied and could not request permission') { $r.Denied++ }
+    if ($l -match '^\s*$' -or $l.StartsWith($bar) -or $l.StartsWith($corner)) { continue }
+    $stage = 0
+    $x = ($l -replace '\s+', ' ').Trim().ToLowerInvariant()
+    if ($x.Length -ge 8) { $text[$x] = 1 + [int]$text[$x] }
   }
-  if ($counts.Count -eq 0) { return @(0, '-') }
-  $top = $counts.GetEnumerator() | Sort-Object Value -Descending | Select-Object -First 1
-  return @([int]$top.Value, [string]$top.Key)
+  if ($key) { $act[$key] = 1 + [int]$act[$key] }
+  if ($act.Count -gt 0) {
+    $top = $act.GetEnumerator() | Sort-Object Value -Descending | Select-Object -First 1
+    $r.Action = [int]$top.Value; $r.ActionKey = [string]$top.Key
+    if ($r.ActionKey.Length -gt 100) { $r.ActionKey = $r.ActionKey.Substring(0, 100) }
+  }
+  if ($text.Count -gt 0) { $r.Text = [int]($text.Values | Measure-Object -Maximum).Maximum }
+  return $r
 }
+# Prose repeats this often count as degeneration (well above any real report's repeated lines).
+function Get-FillerLimit { [Math]::Max(200, $RepeatStop * 5) }
 
 function Get-HungChildren([string]$dir) {
   if (-not (Test-WorkerAlive $dir)) { return @() }
@@ -243,8 +271,12 @@ function Update-Health([string]$dir) {
   $id = Split-Path -Leaf $dir
   $elapsedMin = ((Get-Now) - [long](Read-Text (Join-Path $dir 'started_epoch'))) / 60.0
   if ($MaxRunMinutes -gt 0 -and $elapsedMin -ge $MaxRunMinutes) { Stop-Run $id 'max_runtime' | Out-Null; return }
-  $rep = Get-TopRepeat (Join-Path $dir 'output.log')
-  if ($RepeatStop -gt 0 -and $rep[0] -ge $RepeatStop) { Stop-Run $id 'loop' | Out-Null; return }
+  $st = Get-LogStats (Join-Path $dir 'output.log')
+  if ($RepeatStop -gt 0) {
+    if ($st.Action -ge $RepeatStop) { Stop-Run $id 'loop' | Out-Null; return }
+    if ($st.Denied -ge $RepeatStop) { Stop-Run $id 'denied' | Out-Null; return }
+    if ($st.Text -ge (Get-FillerLimit)) { Stop-Run $id 'filler' | Out-Null; return }
+  }
   $log = Join-Path $dir 'output.log'
   if ($StallMinutes -gt 0 -and (Test-Path $log)) {
     $logIdle = ((Get-Date) - (Get-Item $log).LastWriteTime).TotalMinutes
@@ -260,20 +292,31 @@ function Write-Health([string]$dir) {
     $lines = @(Get-Content $log).Count
     $logIdle = '{0:N1}' -f ((Get-Date) - (Get-Item $log).LastWriteTime).TotalMinutes
   }
-  $rep = Get-TopRepeat $log
+  $st = Get-LogStats $log
   $files = @(Get-StatusLines | Where-Object { $_ -notmatch ' \.work/' }).Count
   $changed = Read-Text (Join-Path $dir 'diff_changed_epoch'); if (-not $changed) { $changed = Get-Now }
   'HEALTH:'
   "  LOG_LINES: $lines · LOG_IDLE_MIN: $logIdle"
   "  DIFF_FILES: $files · DIFF_IDLE_MIN: $(Get-MinutesSince ([long]$changed))"
-  "  TOP_REPEAT: $($rep[0])x `"$($rep[1])`" (auto-stop at $RepeatStop; 0 = off)"
+  "  TOP_REPEAT: $($st.Action)x `"$($st.ActionKey)`" (auto-stop at $RepeatStop; 0 = off)"
+  "  DENIED: $($st.Denied) · TOP_TEXT_REPEAT: $($st.Text)x (auto-stop at $(Get-FillerLimit))"
   $proxy = Join-Path $dir 'proxy.log'
   if (Test-Path $proxy) {
     $req = @(Select-String -Path $proxy -Pattern ' -> ').Count
     $err = @(Select-String -Path $proxy -Pattern ' -> [45][0-9][0-9]').Count
     "  MODEL_REQUESTS: $req (errors: $err)"
   }
+  # Copilot prints its token totals when a run ends; every model request re-sends the whole context,
+  # so cost tracks the number of requests far more than the size of the change.
+  if (Test-Path $log) {
+    $tok = Select-String -Path $log -Pattern '^Tokens ' -Encoding UTF8 | Select-Object -Last 1
+    if ($tok) { "  TOKENS: $(($tok.Line -replace '^Tokens\s*', ''))" }
+  }
   foreach ($h in (Get-HungChildren $dir)) { "  HUNG_CHILD: $h" }
+  # Sustained CPU saturation (often stray processes from an earlier experiment) makes every test
+  # timing and agent run look slow for no reason of their own.
+  $cpu = (Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue | Measure-Object -Property LoadPercentage -Average).Average
+  if ($cpu -ge 95) { "  HIGH_LOAD: CPU at $([int]$cpu)%; timings are unreliable until it drops (look for stray processes with Get-Process)" }
 }
 
 # ---- Summary -------------------------------------------------------------------------------------

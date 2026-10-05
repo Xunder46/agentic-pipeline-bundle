@@ -1,5 +1,5 @@
 ---
-description: Govern the Copilot planner → developer → reviewer cycle for one feature, end to end
+description: Govern the Copilot planner → developer → reviewer cycle for one feature or PR-sized unit, end to end
 argument-hint: <feature description, or path to a roadmap item / brief>
 ---
 
@@ -24,7 +24,9 @@ Feature request: $ARGUMENTS
 - Verify commands, in order: `{{LINT_CMD}}`, then `{{TEST_CMD}}`
 - Extra verify command (build/typecheck; "(not used in this project)" means skip): `{{BUILD_CMD}}`
 - Project invariant checks every run must leave clean: {{INVARIANT_CHECKS}}
-- Plans: `{{PLANS_ROOT}}/<slug>-plan.md` · Conventions: `{{CONVENTIONS_DOC}}`
+- Plans: one folder per plan, `{{PLANS_ROOT}}/<slug>-plan/`, holding `<slug>-plan.md`,
+  `<slug>-plan.evidence.md` and `<slug>-plan.review.md` · Conventions: `{{CONVENTIONS_DOC}}`
+- Scope budget: `.github/copilot/pr-scope-budget.md` (applied with the `pr-scope-guard` skill)
 - Max plan revisions: 2
 - Max fix rounds (verify failures + review rejections combined): 3
 - Max total agent time for one feature: {{MAX_AGENT_MINUTES}} minutes
@@ -46,8 +48,9 @@ exactly the tool permissions in `.github/copilot/permissions/common.flags` + `<n
    profiles and refuses allow-all. When an agent reports a denied command or write, treat it as a
    finding: log friction, and if the work truly needs it, stop and ask the user (`/retro` changes
    profiles).
-3. Never write or edit product code or tests. Every code change goes through an agent. The only files
-   you create or edit are under `.work/`.
+3. Never write or edit product code, tests or docs. Every change goes through an agent. The only files
+   you create or edit are under `.work/`; the only other thing you create is empty directories an agent
+   needs (Copilot's create tool cannot make directories).
 4. Friction is record-only. Append entries to `.work/friction.md` in the format below. Do not fix,
    work around, or propose changes for anything you record, and do not mention fixes in your reports.
 5. Do not read full agent logs. Work from the runner summary. If you need more, search the log for
@@ -55,36 +58,83 @@ exactly the tool permissions in `.github/copilot/permissions/common.flags` + `<n
 6. Never merge, never force-push, never push to the base branch.
 7. Keep your own context small: targeted file reads, `git diff --stat` before full diffs, trimmed
    test output (failures only).
+8. **Decision ownership.** The owner decides product behaviour: what the software does and what its
+   users see. You and the agents decide architecture, structure, naming, tests and libraries: decide,
+   state it in one line, proceed. Ask the owner only about observable behaviour or product trade-offs,
+   and report in terms of what the software now does.
+9. **Scope.** Run the `pr-scope-guard` skill when the plan is accepted, after each implementation
+   phase, and after the review. Over budget → bring the unit to a stopping point and plan the rest as
+   a separate unit; never grow the plan. Evidence goes in `<plan>.evidence.md`, review findings in
+   `<plan>.review.md`, never in the plan itself.
+10. **Machine hygiene.** Never start background load or stress experiments: stopping a background
+    command does not stop its children (40 stray busy loops once ran 14 hours and made every suite 3x
+    slower). If one is unavoidable, run it bounded in the foreground with a `trap` that kills it, then
+    count the processes with `ps` to prove they are gone. Act on the runner's `HIGH_LOAD` line.
+
+## Cost
+
+Every model request re-sends the agent's whole context (typically 30–60k tokens; about 25k of it is
+fixed instructions), so a run's cost is roughly its number of requests, not the size of its change.
+Measured on one day of runs: a 24-request fix cost 0.7M input tokens, a 193-request phase 10.6M, and
+a single stuck loop of 577 requests about 29M, a fifth of the day. What keeps the request count down:
+
+- **One concern per run**, about ten steps at most: one phase, or part A / part B of a large phase.
+  A failure late in a long run costs everything before it, and short runs stay below the point where
+  the agent's context is compacted and it starts re-reading its brief.
+- **Point agents at plan sections**, not "read the plan": the decisions, the scenarios and the phase
+  they implement. Agents re-read whole plans 8–40 times in a run.
+- **Closed fix briefs.** A fix brief names the defect, the change, and the one check that proves it,
+  then "touch nothing else; if that check is not enough, stop and report". An open invitation ("also
+  look for similar mistakes") turned a one-line fix into a 22-minute, 100-request investigation.
+- **Never ask an agent to verify what its tools cannot check** (a build or platform the gateway does
+  not run): it substitutes exploration for the check. Run that check yourself and give it the result.
+- **Quote only fresh output** in a brief. An agent handed a stale log spends its run re-verifying it.
 
 ## Workflow
 
 ### 0. Preflight
-- `git status --porcelain` must be empty. If not, stop and ask.
-- `git switch {{BASE_BRANCH}}` then `git switch -c feature/<short-slug>`.
+- `git status --porcelain` must be empty. If not, stop and ask. Never absorb unrelated changes.
+- `git switch {{BASE_BRANCH}}` then `git switch -c feature/<short-slug>`. Record `git rev-parse HEAD`
+  as the base in `.work/<slug>/base.txt`.
 - Use `.work/<slug>/` for every brief you write.
 - **Owner-check backlog.** `grep -rln "(owner)" {{PLANS_ROOT}}` and list any owner check still marked
   not run / pending. Show the list to the user in one line per item before planning. Never let the
   backlog grow silently; it never blocks the run.
 
 ### 1. Understand
-Read only the parts of the repo this feature touches. Stop and ask the user, in one batched message, if:
-- requirements are ambiguous and two reasonable readings lead to different designs, or
+Read only the parts of the repo this feature touches, plus the previous plan for the same area. Stop
+and ask the user, in one batched message with a recommended default per question, if:
+- requirements are ambiguous and two reasonable readings lead to different behaviour users can see, or
 - a decision is hard to reverse (schema, data migration, public API, new dependency), or
-- the request conflicts with something already in the codebase.
+- the request conflicts with something already in the codebase or the docs.
 Otherwise continue without asking.
 
 ### 2. Plan
-Write `.work/<slug>/brief-plan.md` with: goal, acceptance criteria, relevant files and patterns you
-found, constraints, answers to anything the user clarified, the plan path to write
-(`{{PLANS_ROOT}}/<slug>-plan.md`), and this line:
+Create the plan folder yourself first (`mkdir -p {{PLANS_ROOT}}/<slug>-plan`), one per plan if the
+work may split. Write `.work/<slug>/brief-plan.md` with: goal, acceptance criteria, relevant files and
+patterns you found, constraints, answers to anything the user clarified, the exact plan and evidence
+file paths inside that folder, and these lines:
 "List anything you are unsure about under an Open questions heading at the end of the plan."
+"Do not measure or maintain line counts; the governor measures the plan." (A planner once looped 74
+minutes re-counting lines.)
 
 Run the planner. Find the plan file in FILES_CHANGED_DURING_RUN.
 
 Validate the plan against the repo: right files and layers, follows existing patterns, covers every
 acceptance criterion, testable, no scope creep, open questions resolvable, and every phase has Done
-Criteria (commands), Predicted Files and fixture-enumerated scenarios.
-- Sound → continue.
+Criteria (commands), Predicted Files and fixture-enumerated scenarios. Then the checks that caught
+real plan defects:
+- **Re-derive the numbers.** Re-implement any non-trivial rule in a throwaway script and compare EVERY
+  fixture value and expected result. Plans have shipped circular definitions (a threshold measured
+  against a baseline that depended on the thing being detected) and wrong arithmetic.
+- **Read the function behind each "the framework does X" claim**, especially order: where something
+  is registered is not the order it is shown in.
+- **Each mutation check names the seed or stub that turns it red**; one the real fixture cannot tell
+  apart proves nothing.
+- **A new entry in a shared registry lists the existing tests it could also satisfy** (they go red
+  when two results appear where one was expected).
+
+- Sound → run `pr-scope-guard` (you measure the plan), then continue.
 - Fixable → write `brief-plan-rev<N>.md` with specific corrections and the plan path, re-run the planner.
 - Open questions only the user can answer → ask, then revise.
 - Revision limit reached → stop and report to the user.
@@ -93,30 +143,34 @@ Owner-prerequisite gaps: plan and build everything the agents can verify without
 **(owner)**, and split out any stage that cannot be verified blind (e.g. one needing real fixtures).
 
 ### 3. Implement
-Multi-phase plans: run `data-architect` for the data phases first, verify and commit them, then the
-developer. Write `.work/<slug>/brief-dev.md`: the approved plan path, which phases, "implement the plan
-exactly, test-first from the scenario register", and — when giving it several phases — "in ONE run, do not
-stop between phases; stop only when the last phase is done or you are blocked". Paste the standard brief
-footer (below). Run the developer.
+Run `data-architect` for the data phases first, verify and commit them, then the developer. Before each
+run, create any new directory the phase's Predicted Files need. Write `.work/<slug>/brief-<agent>-<phase>.md`:
+the approved plan path, the plan sections to read (decisions, scenarios, this phase), "implement the plan
+exactly, test-first from the scenario register", and the standard brief footer (below).
 
-Prefer one run per phase when a phase is large or touches a new technique: a failed phase then costs one
-phase, and each phase gets its own verify and commit checkpoint.
+**One phase per run** (split a large phase into part A and part B): each phase then gets its own
+verify and commit checkpoint, a failure costs one phase, and the run stays short (see Cost). Give
+several phases to one run only when each is a few steps.
 
 ### 4. Verify (you)
 Run the verify commands yourself, each through the timeout wrapper; do not trust the agent's claim. Also
 run the invariant checks. Read the code of the one or two files where the plan's core invariant lives.
+Check `git diff --stat`: an existing file with a far bigger diff than its edit is formatter damage. Look
+for mutation residue (read the lines the evidence says were mutated) and for stray scratch files.
 
 On failure, write `brief-fix-<N>.md` with the **full, untrimmed failure output**, the plan path, and the
 **goal and the acceptance test**, not a prescribed mechanism: name the defect and what must be true
 afterwards, and let the developer choose how. If you believe a mechanism matters, give it as a
-suggestion the developer may reject with a reason. Re-run the developer, repeat step 4. Each fix counts
-toward the round limit.
+suggestion the developer may reject with a reason. Keep it closed (see Cost). Re-run the developer,
+repeat step 4. Each fix counts toward the round limit.
 
 ### 5. Review
-Write `brief-review-<N>.md`: plan path, base branch, "review `git diff {{BASE_BRANCH}}` against the plan",
-"number each finding with file, severity (blocker / major / minor), and reason", the standing review
-focus below, and "end your response with exactly one line: VERDICT: APPROVE or VERDICT: CHANGES_REQUESTED".
-Run the reviewer and read the verdict from the log tail.
+Write a short, ordered `brief-review-<N>.md` (a long open-ended review brief once degenerated into
+filler): plan path, base commit, "review `git diff <base>` against the plan", "create
+`<plan>.review.md` FIRST, then append each finding to it", "number each finding with file, severity
+(blocker / major / minor), and reason", the standing review focus below, and "end your response with
+exactly one line: VERDICT: APPROVE or VERDICT: CHANGES_REQUESTED". Run the reviewer and read the
+verdict from the log tail.
 
 **Standing review focus** (each item is a class of defect that has shipped behind a green suite):
 - A figure or rule shown on two surfaces is computed in one place, and both surfaces agree on the same
@@ -124,11 +178,13 @@ Run the reviewer and read the verdict from the log tail.
 - No test asserts the buggy behaviour: for each fix, the test fails on the old code.
 - Any rewritten UI component keeps its accessibility semantics and has an interaction/tap test.
 - Injected seams (clock, gateway, repository) are used everywhere, not half-applied.
-- Docs and plan status touched by the change are still true.
+- Docs and plan status touched by the change are still true; every test, type or file a doc names
+  exists, and docs name nothing unshipped.
 
-Then do your own review: `git diff --stat {{BASE_BRANCH}}`, then read the files that matter. Check that
-the change matches the plan, touches nothing unrelated, has tests that exercise the new behaviour, and
-has nothing the reviewer missed.
+Then do your own review: `git diff --stat <base>` (plus untracked files), then read the files that
+matter. Check that the change matches the plan, touches nothing unrelated, has tests that exercise the
+new behaviour, and has nothing the reviewer missed. **Compare test names**: list the test names at the
+base and on the tree; judge every removed name (a rename is fine, a lost guard is not).
 
 Decide:
 - Reviewer approves, you agree, verify is green → go to step 6.
@@ -137,6 +193,8 @@ Decide:
 - A green developer report is not evidence of correctness: never skip the review. Re-review after a fix
   round when the first review had a blocker or major finding. Log which minor findings were left unfixed
   and why.
+- Over the scope budget's review limits → fix only the blockers and cheap mechanical findings, and plan
+  the rest as a follow-up unit.
 - Round limit reached → stop, summarise where things stand, ask the user.
 
 ### 6. Ship
@@ -150,7 +208,8 @@ Do not merge.
   is complete, and any "state of the build" section in `AGENTS.md`/`CLAUDE.md` that the feature made
   false is listed for the user to update (you may not edit those files yourself).
 - Append the SUMMARY entry to `.work/friction.md`.
-- Report to the user in a few lines: PR link, rounds used, owner checks outstanding, anything left open.
+- Report to the user in a few lines: what the software now does, PR link, rounds used, owner checks
+  outstanding, anything left open.
 
 ## Running agents
 
@@ -170,8 +229,9 @@ finishes, and prints a summary. Read STATUS:
   This is the only way to wait; do not poll with sleeps.
 - `FAILED` → read the log tail. Retry once if it looks transient (network, rate limit, provider
   error); otherwise stop and report. Log friction either way.
-- `STOPPED` → STOP_REASON says why (`user`, `max_runtime`, `loop`, `stalled`). The runner stopped it
-  on its own for the last three: log friction, then re-brief with the cause (see below) or ask the user.
+- `STOPPED` → STOP_REASON says why (`user`, `max_runtime`, `loop`, `denied`, `filler`, `stalled`). The
+  runner stopped it on its own for all but `user`: log friction, then re-brief with the cause (see
+  below) or ask the user.
 - If the Bash call itself times out, read `.work/runs/latest.txt` for the RUN_ID and use `wait`.
 - If your total agent time for the feature exceeds the maximum, run `stop <RUN_ID>`, log friction,
   and ask the user.
@@ -181,11 +241,16 @@ finishes, and prints a summary. Read STATUS:
 The runner prints a HEALTH block so you do not have to gather it by hand:
 - `LOG_IDLE_MIN` — minutes since the agent last wrote output
 - `DIFF_FILES` / `DIFF_IDLE_MIN` — files changed so far, and minutes since that set last changed
-- `TOP_REPEAT` — the most repeated agent action (first words, digits normalised) and its count
+- `TOP_REPEAT` — the most repeated tool call (shell calls keyed on the command, reads on path and range)
+- `DENIED` / `TOP_TEXT_REPEAT` — permission denials, and the most repeated line of prose
+- `MODEL_REQUESTS` / `TOKENS` — requests so far (with the proxy), and Copilot's token totals at the end
 - `HUNG_CHILD` — a child process running ≥ 10 min at ~0% CPU (pid, elapsed, command)
+- `HIGH_LOAD` — the machine is saturated; timings are unreliable
 
-It auto-stops a run on `MAX_RUN_MINUTES`, on `REPEAT_STOP` identical actions (a loop), and when both the
-log and the diff are idle for `STALL_MINUTES` (a hang). Between those limits, you judge:
+It auto-stops a run on `MAX_RUN_MINUTES`; on `REPEAT_STOP` repeats of one call (`loop`) or denials
+(`denied`); on a prose line repeated `max(200, 5 × REPEAT_STOP)` times (`filler`: the model has
+degenerated); and when both the log and the diff are idle for `STALL_MINUTES` (`stalled`). Between
+those limits, you judge:
 - `HUNG_CHILD` present → kill that child process only (never the runner or the agent), log friction,
   tell the user. If the same command hangs twice, stop the run and re-brief with the timeout wrapper
   and the fix for the cause.
@@ -195,22 +260,37 @@ log and the diff are idle for `STALL_MINUTES` (a hang). Between those limits, yo
   names is collateral damage (e.g. a tree-wide formatter): stop the run at once. Recover by restoring
   only files whose content equals the formatter's output of their HEAD version, never files with real
   changes.
+- `HIGH_LOAD` → find the cause with `ps`; stop only processes you can prove are yours, and re-check by
+  count before trusting timings.
 - Loops: in the fix brief, include the real failure output and say "if a fix fails twice, stop and
   report instead of re-running".
 
 ## Standard brief footer (paste into every developer / data-architect / reviewer brief)
 
 ```
-Shell rules: your only shell command is the gateway, `{{GATEWAY}}` (`{{GATEWAY}} list` shows the
-checks; each runs with its own timeout). Everything else is denied by policy: read and search with your
-file tools, and never look for a workaround to a denial — report it under Open questions. Exit 124
-means a check timed out: diagnose it, never re-run it unchanged. If a fix fails twice, stop and report;
-never run the same failing check a third time. Do not commit, push, reset or switch branches; do not
-touch .claude/, .github/agents/, .github/copilot/ or AGENTS.md. Run formatters only on files you
-created or changed, by explicit path (the gateway refuses a formatter without paths).
-Update the plan's Progress table and Assumption Log as phases complete.
-Before finishing: `{{GATEWAY}} lint` clean, full `{{GATEWAY}} test` green (paste the real counts), the project
-invariant checks clean ({{INVARIANT_CHECKS}}), and the plan's own residue sweeps.
+Shell: your only shell command is the gateway, `{{GATEWAY}}`, spelled exactly like that and never
+piped or chained (`{{GATEWAY}} list` shows the checks; each runs with its own timeout). Everything
+else is denied by policy: read and search with your file tools. A denied command is never retried, in
+any spelling; record what you needed under Open questions. Exit 124 means a check timed out: diagnose
+it, never re-run it unchanged. If a fix fails twice, stop and report; never run the same failing check
+a third time. Long output is saved under .work/gateway/ and summarised: read the log by line range
+only when the summary is not enough.
+Turns: every turn calls a tool; never write filler text. Do not re-read a file section you already
+have unless you changed it.
+Git and pipeline: do not commit, push, reset or switch branches; do not touch .claude/, .github/agents/,
+.github/copilot/ or AGENTS.md.
+Files: create no scratch or probe files; remove one you made with `{{GATEWAY}} delete-scratch`. Run
+formatters only on files you created, by explicit path. Edit existing files with minimal edits, then
+check them with `{{GATEWAY}} git-diff --stat`: a diff bigger than your edit means undo and report.
+Tests: no real-clock thresholds (bracket between timestamps, or poll to a deadline). Every new guard is
+shown red first, or by a mutation: record the original line, change it, see the test fail, restore the
+EXACT original, re-run green; never end a step with a mutation applied. If a change turns an EXISTING
+test red that the plan did not predict, stop and report; do not edit that test. If a step's text
+contradicts the plan's decisions, follow the decisions and log it in the Assumption Log.
+Plan: update the plan's Progress table (one line per item) and Assumption Log as phases complete; put
+baselines, suite outputs and red/green tables in the plan's .evidence.md, never in the plan.
+Before finishing: `{{GATEWAY}} lint` clean, full `{{GATEWAY}} test` green (paste the real counts), the
+project invariant checks clean ({{INVARIANT_CHECKS}}), and the plan's own residue sweeps.
 ```
 
 ## Friction log
@@ -225,20 +305,20 @@ Append to `.work/friction.md` (create it if missing) whenever:
 - the same finding came back in a later round
 - you had to spell out something in a brief that the agent should have found in the repo
 
-Entry format:
+Format:
 
 ```
-### <YYYY-MM-DD> · <slug> · <agent> · <stage>
-- What happened: <one or two factual sentences>
-- Cost: <e.g. +1 fix round, plan rejected, 25 min lost>
-- Evidence: <RUN_ID> — <≤2-line excerpt or file path>
+### <YYYY-MM-DD> · <slug> · <agent> · stage <n>
+- What happened: <one or two sentences, facts only>
+- Cost: <+n fix rounds / +n plan revisions / ~n minutes lost / none>
+- Evidence: <RUN_ID, or a short quoted excerpt>
 ```
 
-Per-feature summary, written once at the end (also when you stop early):
+At the end of each feature (shipped or stopped), add:
 
 ```
 ### <YYYY-MM-DD> · <slug> · SUMMARY
-- Plan revisions: <n> · Fix rounds: <n> · Verify green on first try: <yes/no> · Review found blocker/major behind green: <yes/no> · Agent time: <n> min · Outcome: <PR link / stopped: reason>
+- Plan revisions: <n> · Fix rounds: <n> · Verify green on first try: <yes/no> · Review found blocker/major behind green: <yes/no> · Agent time: <n> min · Model requests: <n> · Outcome: <PR link / stopped: reason>
 ```
 
 Record facts only. No suggested fixes, no opinions about the agents' instructions — `/retro` turns the

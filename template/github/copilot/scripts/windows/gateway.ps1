@@ -7,10 +7,17 @@ The ONLY shell command Copilot agents may run on Windows (allowed by
   .github/copilot/scripts/windows/gateway.ps1 git-status
   .github/copilot/scripts/windows/gateway.ps1 git-diff [<ref>] [--stat|--name-only|--name-status|--cached] [-- <path>...]
   .github/copilot/scripts/windows/gateway.ps1 git-log [<count>] [<ref>]
-  .github/copilot/scripts/windows/gateway.ps1 git-show <ref> [--stat]
+  .github/copilot/scripts/windows/gateway.ps1 git-show <ref> [--stat|--name-only|--name-status]
+  .github/copilot/scripts/windows/gateway.ps1 delete-scratch <path>   removes an untracked probe file
 
 Runs a fixed menu, with every argument checked to stay inside the repository. Exit status: the
-check's own; 124 on timeout; 2 for a refused request. Works in Windows PowerShell 5.1 and PowerShell 7.
+check's own; 124 on timeout; 2 for a refused request.
+
+Output: a check that prints more than $SummaryOver lines is saved whole under .work/gateway/ and
+shown as a summary (first lines, every line that looks like a failure, the last lines, and the path
+of the full log). Every model request re-sends the agent's whole context, so a 40 KB lint dump that
+the agent then re-reads in chunks costs far more than the check itself. A check with the
+`full-output` option in gateway.conf always prints everything. Works in Windows PowerShell 5.1 and PowerShell 7.
 Requires an execution policy that runs local scripts (PowerShell 7's default, RemoteSigned).
 #>
 $ErrorActionPreference = 'Stop'
@@ -21,6 +28,9 @@ $root = (& git rev-parse --show-toplevel 2>$null)
 if (-not $root) { [Console]::Error.WriteLine('gateway: not inside a git repository'); exit 2 }
 Set-Location $root
 $conf = Join-Path $root '.github/copilot/gateway.conf'
+$SummaryOver = 200
+# Untracked files whose path starts with this may be removed with delete-scratch (set by the installer).
+$ScratchPrefix = '{{SCRATCH_PREFIX}}'
 
 function Test-Arg([string]$a) {
   if ($a -match '^[/\\~]') { Refuse "absolute or home path: $a" }
@@ -57,7 +67,9 @@ function Show-List {
     $opt = if ($e.Options) { "  [$($e.Options)]" } else { '' }
     '  {0,-14} {1,5}s  {2}{3}' -f $e.Name, $e.Timeout, $e.Command, $opt
   }
-  'Git views: git-status · git-diff [<ref>] [--stat|--name-only|--name-status|--cached] [-- <path>...] · git-log [<count>] [<ref>] · git-show <ref> [--stat]'
+  'Git views: git-status · git-diff [<ref>] [--stat|--name-only|--name-status|--cached] [-- <path>...] · git-log [<count>] [<ref>] · git-show <ref> [--stat|--name-only|--name-status]'
+  "Cleanup: delete-scratch ${ScratchPrefix}<name> (an untracked probe file you created)"
+  "Output over $SummaryOver lines is summarised; the full log path is printed (read it with your file tool)."
 }
 
 function Format-Arg([string]$a) {
@@ -66,7 +78,25 @@ function Format-Arg([string]$a) {
   return '"' + ($a -replace '(\\*)"', '$1$1\"' -replace '(\\+)$', '$1$1') + '"'
 }
 
-function Invoke-WithTimeout([int]$secs, [string[]]$parts) {
+# Prints a check's output: whole when short, otherwise a summary that points at the full log.
+function Write-CheckOutput([string]$exe, [string]$log) {
+  $l = @(Get-Content -Path $log -Encoding UTF8 -ErrorAction SilentlyContinue)
+  $cut = { param($s) if ($s.Length -gt 300) { $s.Substring(0, 300) + ' ...' } else { $s } }
+  if ($l.Count -le $SummaryOver) { $l | ForEach-Object { & $cut $_ }; return }
+  $rel = $log.Substring($root.Length).TrimStart('\', '/') -replace '\\', '/'
+  $fail = '(?i)\b(error|errors|fail|failed|failure|failing|exception|panic|traceback|assert\w*|expected|actual|timed? ?out)\b|\[E\]|' + [char]0x2717
+  $hits = @(0..($l.Count - 1) | Where-Object { $l[$_] -match $fail })
+  "gateway: $exe printed $($l.Count) lines; full output: $rel"
+  '--- first 5 lines'; $l[0..4] | ForEach-Object { & $cut $_ }
+  $shown = @($hits | Select-Object -First 120)
+  $note = if ($hits.Count -gt 120) { ', first 120' } else { '' }
+  "--- lines that look like failures ($($hits.Count))$note"
+  foreach ($i in $shown) { '{0,6}: {1}' -f ($i + 1), (& $cut $l[$i]) }
+  '--- last 40 lines'; $l[($l.Count - 40)..($l.Count - 1)] | ForEach-Object { & $cut $_ }
+  "--- full output: $rel (read it with your file tool, by line range)"
+}
+
+function Invoke-WithTimeout([int]$secs, [string[]]$parts, [string]$log = '') {
   $exe = $parts[0]
   $rest = @(); if ($parts.Count -gt 1) { $rest = $parts[1..($parts.Count - 1)] }
   $cmd = Get-Command $exe -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -82,13 +112,25 @@ function Invoke-WithTimeout([int]$secs, [string[]]$parts) {
   } else {
     $file = $path
   }
-  $p = Start-Process -FilePath $file -ArgumentList $argLine -NoNewWindow -PassThru
-  if (-not $p.WaitForExit($secs * 1000)) {
-    & taskkill.exe /PID $p.Id /T /F *> $null
+  if (-not $log) {
+    $p = Start-Process -FilePath $file -ArgumentList $argLine -NoNewWindow -PassThru
+  } else {
+    # Start-Process cannot send both streams to one file; join them afterwards (stdout, then stderr).
+    $p = Start-Process -FilePath $file -ArgumentList $argLine -NoNewWindow -PassThru `
+      -RedirectStandardOutput "$log.out" -RedirectStandardError "$log.err"
+  }
+  $timedOut = -not $p.WaitForExit($secs * 1000)
+  if ($timedOut) { & taskkill.exe /PID $p.Id /T /F *> $null }
+  $p.WaitForExit()
+  if ($log) {
+    Get-Content "$log.out", "$log.err" -Encoding UTF8 -ErrorAction SilentlyContinue | Set-Content $log -Encoding UTF8
+    Remove-Item "$log.out", "$log.err" -ErrorAction SilentlyContinue
+    Write-CheckOutput $exe $log
+  }
+  if ($timedOut) {
     [Console]::Error.WriteLine("gateway: TIMEOUT after ${secs}s: $($parts -join ' ')")
     exit 124
   }
-  $p.WaitForExit()
   exit $p.ExitCode
 }
 
@@ -101,9 +143,37 @@ function Invoke-Check([string]$name, [string[]]$extra) {
   if ($e.Options -match 'requires-args' -and $extra.Count -eq 0) {
     Refuse "'$name' needs explicit file arguments (it must never run on the whole tree)"
   }
+  if ($e.Options -match 'new-files-only') {
+    foreach ($a in $extra) {
+      if ($a.StartsWith('-')) { continue }
+      & git ls-files --error-unmatch -- $a *> $null
+      if ($LASTEXITCODE -eq 0) { Refuse "'$name' only runs on files this change created; '$a' is already tracked by git. Edit existing files with small edits instead" }
+    }
+  }
   $parts = @($e.Command -split '\s+' | Where-Object { $_ -ne '' }) + $extra
   [Console]::Error.WriteLine("gateway: $name (timeout $($e.Timeout)s): $($parts -join ' ')")
-  Invoke-WithTimeout ([int]$e.Timeout) $parts
+  if ($e.Options -match 'full-output') { Invoke-WithTimeout ([int]$e.Timeout) $parts }
+  $dir = Join-Path $root '.work/gateway'
+  New-Item -ItemType Directory -Force -Path $dir | Out-Null
+  Get-ChildItem $dir -Filter '*.log' -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-1) } | Remove-Item -ErrorAction SilentlyContinue
+  $log = Join-Path $dir ('{0}-{1}-{2}.log' -f $name, (Get-Date -Format 'yyyyMMdd-HHmmss'), $PID)
+  Invoke-WithTimeout ([int]$e.Timeout) $parts $log
+}
+
+# Lets an agent remove its OWN probe file: only an untracked regular file under $ScratchPrefix.
+function Remove-Scratch([string[]]$a) {
+  if ($a.Count -ne 1) { Refuse 'delete-scratch takes exactly one path' }
+  $p = $a[0] -replace '\\', '/'
+  Test-Arg $p
+  $name = if ($p.StartsWith($ScratchPrefix)) { $p.Substring($ScratchPrefix.Length) } else { '' }
+  if ($name -notmatch '^[A-Za-z0-9_.-]+$') { Refuse "delete-scratch only removes ${ScratchPrefix}<name> probe files: $p" }
+  & git ls-files --error-unmatch -- $p *> $null
+  if ($LASTEXITCODE -eq 0) { Refuse "delete-scratch will not remove a tracked file: $p" }
+  $item = Get-Item -LiteralPath $p -ErrorAction SilentlyContinue
+  if (-not $item -or $item.PSIsContainer -or $item.LinkType) { Refuse "no such file: $p" }
+  Remove-Item -LiteralPath $p
+  [Console]::Error.WriteLine("gateway: removed $p")
+  exit 0
 }
 
 function Invoke-GitDiff([string[]]$a) {
@@ -142,7 +212,7 @@ function Invoke-GitShow([string[]]$a) {
   $ref = $a[0]; Test-Ref $ref
   $gitArgs = @('--no-pager', 'show')
   foreach ($x in ($a | Select-Object -Skip 1)) {
-    if ($x -eq '--stat') { $gitArgs += '--stat' } else { Refuse "git-show option not allowed: $x" }
+    if ($x -in '--stat', '--name-only', '--name-status') { $gitArgs += $x } else { Refuse "git-show option not allowed: $x" }
   }
   $gitArgs += $ref
   & git @gitArgs
@@ -159,5 +229,6 @@ switch ($action) {
   'git-diff' { Invoke-GitDiff $rest }
   'git-log' { Invoke-GitLog $rest }
   'git-show' { Invoke-GitShow $rest }
+  'delete-scratch' { Remove-Scratch $rest }
   default { Invoke-Check $action $rest }
 }

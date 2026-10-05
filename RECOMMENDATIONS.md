@@ -7,7 +7,7 @@ Multi-agent pipelines tend to fail in a few predictable ways:
 - a tool rewrites files nobody asked it to touch
 - status and checklists drift out of date
 
-The first section shows how this bundle guards against each. The second lists improvements worth considering once it's running in your project.
+The first section shows how this bundle guards against each. The second shows where the tokens go in practice. The third lists improvements worth considering once it's running in your project.
 
 ## 1. What the bundle already does, and why
 
@@ -29,14 +29,44 @@ The first section shows how this bundle guards against each. The second lists im
 | 13 | **Friction is recorded during a run and acted on only through `/retro`** | Process changes made mid-run, by the agent being governed |
 | 14 | **One planner installed**, chosen in the config | Two planners with overlapping instructions |
 | 15 | **Per-role models** (planner / developer / reviewer) | Paying top-model prices for routine implementation, or skimping on the review |
+| 16 | **Loop detection keyed on what the agent does, not what it says.** Shell calls are counted by command, reads by path and line range, failed and denied calls included; denials and repeated prose stop a run too | A model that retitles the same `grep` 536 times ("Triple check thirty-first time"), retries a denied command 652 times, or writes 30,000 lines of filler, all unseen by a title-based counter |
+| 17 | **The gateway summarises long output** and keeps the full log in `.work/gateway/` | A 37 KB lint report (mostly pre-existing notices) saved to a temp file and re-read in chunks: 98 such reads in one day |
+| 18 | **`new-files-only` formatters and `delete-scratch`** in the gateway | A formatter turning a 4-line edit into a 400-line diff; probe files the agent cannot delete left for the owner |
+| 19 | **One folder per plan, with evidence and review files beside it, and a scope budget** (`pr-scope-budget.md`, `pr-scope-guard`) | Plans growing to thousands of lines of evidence and review text that every agent then re-reads; one PR that should have been three |
+| 20 | **Plan validation by re-derivation**: the governor re-implements non-trivial rules in a script and checks every fixture number, reads the function behind each "the framework does X" claim | Circular definitions, wrong arithmetic and wrong ordering claims reaching implementers, who then loop trying to satisfy an impossible scenario |
 
-## 2. Improvements worth considering
+## 2. Where the tokens go
 
-1. **Spend your strongest model on review.** In practice, independent review is the stage that keeps
-   finding real defects behind passing tests. Either set `REVIEWER_MODEL` to your provider's
-   strongest model, or, in `/feature` step 5, use the Claude `code-reviewer` subagent instead of the
-   Copilot reviewer, keeping Copilot for planning and implementation. Track the effect with the
-   friction SUMMARY's "review found blocker/major behind green" field.
+Measured on a real project running this pipeline, one day of Copilot runs (28 finished runs, all on one
+fast model):
+
+- **Cost is the number of model requests.** Every request re-sends the agent's whole context: 52k
+  tokens on average, about 25–30k of it fixed (Copilot's own prompt, the agent file, the project's
+  instruction files). 96% of input tokens were cache hits, so caching softens the price but not the
+  shape: a 24-request fix cost 0.7M input tokens, a 193-request phase 10.6M.
+- **The single biggest cost was one loop:** 577 requests (about 29M tokens, a fifth of the day) on
+  the same `grep`, which the old title-based loop counter could not see. The runner now catches it at
+  40 (§1, row 16).
+- **Re-reading is the next biggest.** Agents re-read the plan 8–40 times in a run, and re-read large
+  tool output (a 37 KB lint report) from temp files in chunks. Short plans, briefs that name the plan
+  sections to read, and the gateway's summaries (row 17) all cut requests.
+- **Open-ended briefs are expensive.** A one-line fix whose brief also said "look for similar
+  mistakes" ran 22 minutes and 100 requests, mostly reading compiler and SDK files it had no way to
+  check. Closed fix briefs and "never ask an agent to verify what its tools cannot check" are now in
+  `/feature`.
+- **Plan defects cost the most time.** Most re-runs traced back to the plan: circular definitions,
+  wrong fixture arithmetic, ordering claims nobody had read the code for, scenarios a rule's own floors
+  made unreachable. Two implementer runs degenerated into filler trying to satisfy one of them.
+
+## 3. Improvements worth considering
+
+1. **Spend your strongest model on planning and review.** Review is the stage that keeps finding
+   real defects behind passing tests, and plan defects are the largest source of re-runs (§2). Set
+   `PLANNER_MODEL` and `REVIEWER_MODEL` to your provider's strongest model and keep
+   `DEVELOPER_MODEL` fast: planners and reviewers make few requests per feature, implementers make
+   most of them. Or, in `/feature` step 5, use the Claude `code-reviewer` subagent instead of the
+   Copilot reviewer. Track the effect with the friction SUMMARY's "review found blocker/major behind
+   green" and "Plan revisions" fields.
 2. **Retire the OpenCode proxy if your Copilot version allows it.** Copilot CLI supports
    `COPILOT_PROVIDER_HEADERS` (custom headers sent to a BYOK endpoint). Try
    `COPILOT_PROVIDER_BASE_URL=https://opencode.ai/zen/go/v1` with
@@ -51,9 +81,10 @@ The first section shows how this bundle guards against each. The second lists im
 4. **Make the repo formatter-clean once, then enforce it.** One `chore: format` commit, its hash in
    `.git-blame-ignore-revs`, and a `--set-exit-if-changed`-style check in CI remove the risk behind
    rule 10 entirely.
-5. **One developer run per phase for long plans.** A single run across many phases is cheaper in
-   governor turns, but a failure late in the run costs everything before it. A phase per run gives a
-   verify-and-commit checkpoint after each phase and cheaper fix rounds.
+5. **Keep agent files and project instructions short.** Copilot loads the agent file and the
+   project's instruction files (`AGENTS.md`, `CLAUDE.md`) into every request. Long code samples and
+   project history in those files are paid for on every one of a run's requests; point at docs
+   instead.
 6. **Keep a first-class owner-check register** (e.g. `docs/owner-checks.md`) once more than a handful
    accumulate. The preflight grep in `/feature` is a stopgap.
 7. **Re-verify the permission model after each Copilot CLI upgrade.** The deny list in

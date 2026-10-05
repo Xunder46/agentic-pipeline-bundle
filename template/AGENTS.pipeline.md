@@ -14,7 +14,7 @@ Agents come in two editions: `.claude/agents/<name>.md` for Claude Code subagent
 | Architecture docs / index | `{{DOCS_ROOT}}` / `{{DOCS_INDEX}}` |
 | Conventions (binding rule source) | `{{CONVENTIONS_DOC}}` |
 | Doc standard | `{{DOC_STANDARD}}` |
-| Plans | `{{PLANS_ROOT}}/<feature>-plan.md` |
+| Plans | `{{PLANS_ROOT}}/<feature>-plan/<feature>-plan.md` |
 | Layers | models `{{MODEL_DIR}}` · persistence `{{PERSISTENCE_DIR}}` · state `{{STATE_DIR}}` · screens `{{UI_DIR}}` · shared UI `{{SHARED_UI_DIR}}` · core `{{CORE_DIR}}` |
 | Persistence interface | `{{DATA_INTERFACE}}` — production `{{PRIMARY_IMPL}}`, tests `{{TEST_IMPL}}` |
 | Schema artifact / seed | `{{SCHEMA_ARTIFACT}}` / `{{SEED_FILE}}` |
@@ -31,9 +31,11 @@ Agents come in two editions: `.claude/agents/<name>.md` for Claude Code subagent
 
 ### Rules for every agent
 
-- **The plan file is the contract.** Read `{{PLANS_ROOT}}/<feature>-plan.md` before writing anything;
+- **The plan file is the contract.** Read `{{PLANS_ROOT}}/<feature>-plan/<feature>-plan.md` before writing anything;
   write Progress, the Assumption Log and Feedback back to it. Coordinate through the plan, never through
-  chat history. Decisions are `D-n`, scenarios `S-n`; both are stable and never reused.
+  chat history. Decisions are `D-n`, scenarios `S-n`; both are stable and never reused. Evidence goes in
+  `<feature>-plan.evidence.md` and review findings in `<feature>-plan.review.md`, beside the plan; the
+  plan stays within `.github/copilot/pr-scope-budget.md`.
 - **Git belongs to the governor.** Never commit, push, reset, switch or check out branches.
 - **Shell commands.** Copilot agents: the gateway `{{GATEWAY}}` is the only shell command they may
   run (everything else is denied by `.github/copilot/permissions/`). Claude Code agents: wrap long
@@ -55,10 +57,11 @@ Agents come in two editions: `.claude/agents/<name>.md` for Claude Code subagent
 | `.github/agents/` | GitHub Copilot CLI editions of the same agents |
 | `.github/copilot/` | Copilot permission profiles (`permissions/`), the gateway and its checks (`gateway.conf`, `scripts/`) |
 | `.claude/commands/` | `/feature` (governor), `/plan`, `/implement`, `/review`, `/resume`, `/run-pipeline`, `/retro` |
+| `.claude/skills/pr-scope-guard/` | applies the PR scope budget (`.github/copilot/pr-scope-budget.md`) at each checkpoint |
 | `.claude/scripts/` | the Copilot runner, timeout wrapper and OpenCode wrapper ({{PLATFORM}} edition), plus the shared proxy |
 | `.claude/pipeline.env` | runner settings (no secrets) |
-| `.work/` (gitignored) | briefs, run logs (`.work/runs/<RUN_ID>/`), `friction.md` |
-| `{{PLANS_ROOT}}/` | plan files (committed) |
+| `.work/` (gitignored) | briefs, run logs (`.work/runs/<RUN_ID>/`), full gateway output (`.work/gateway/`), `friction.md` |
+| `{{PLANS_ROOT}}/` | one folder per plan: plan, evidence and review files (committed) |
 
 Project-specific timeouts and known hangs: see **Known long-running or hanging commands** below this
 block.

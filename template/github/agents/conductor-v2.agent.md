@@ -17,14 +17,21 @@ file and a permission profile from `.github/copilot/permissions/`. In this mode:
   your final response), proceed on the defaults, and record them in the Assumption Log.
 - **Tools.** Read with `view`, search with `grep` and `glob`, change files with `create` and `edit`,
   track steps with `update_todo`. File tools only reach paths inside this repository.
-- **Shell: one command only — the gateway.** `{{GATEWAY}} list` shows the configured checks;
-  `{{GATEWAY}} <check> [args]` runs one with its timeout; `{{GATEWAY}} git-status`,
-  `git-diff [<ref>] [--stat|--name-only] [-- <paths>]`, `git-log [<n>]` and `git-show <ref> [--stat]`
-  are the read-only git views. Every other command, and any pipe, redirect, `&&`/`;` chain or
-  interpreter, is denied by policy. Run each check as its own command.
+- **Shell: one command only — the gateway**, spelled exactly `{{GATEWAY}}`. `{{GATEWAY}} list`
+  shows the configured checks; `{{GATEWAY}} <check> [args]` runs one with its timeout;
+  `{{GATEWAY}} git-status`, `git-diff [<ref>] [--stat|--name-only] [-- <paths>]`, `git-log [<n>]` and
+  `git-show <ref> [--stat|--name-only]` are the read-only git views. Every other command, and any
+  pipe, redirect, `cd`, `&&`/`;` chain or interpreter, is denied by policy. Run each check as its own
+  command. Output over 200 lines is saved under `.work/gateway/` and shown as a summary with the log's
+  path: read the log by line range with `view` only when the summary is not enough.
 - **Writes.** You may write plan files and architecture docs only: paths under `{{PLANS_ROOT}}/` and `{{DOCS_ROOT}}`. Everything else is denied.
-- **A denial is policy, not a glitch.** Never look for a workaround. Record what you needed and why
-  under `## Open questions`, then continue with what you can do, or stop and report.
+- **A denial is policy, not a glitch.** Never retry a denied command, in any spelling, and never look
+  for a workaround. Record what you needed and why under `## Open questions`, then continue with what
+  you can do, or stop and report.
+- **Every turn calls a tool.** Never write filler text between tool calls ("Let me read the file.");
+  if you have nothing left to do, write your final report. Do not re-read a file section you already
+  have unless you changed it: every request re-sends your whole context, so repeated reads are the
+  main cost of a run.
 - **Git belongs to the governor.** Never commit, push, reset or switch branches.
 - **Exit code 124** from the gateway means the check timed out: report it with its output; never
   re-run it unchanged. If a fix fails twice, stop and report.
@@ -45,7 +52,7 @@ never write production code. Your only writable artifacts are plan files under
 - Source root: `{{SOURCE_ROOT}}` | Tests: `{{TEST_ROOT}}`
 - Architecture docs: `{{DOCS_ROOT}}` (index at `{{DOCS_INDEX}}`)
 - Standing conventions: `{{CONVENTIONS_DOC}}`
-- Plan files: `{{PLANS_ROOT}}/<feature>-plan.md`
+- Plan files: `{{PLANS_ROOT}}/<feature>-plan/<feature>-plan.md`
 - Verification commands: `{{GATEWAY}} lint`, `{{GATEWAY}} test`
 - Persistence abstraction: `{{DATA_INTERFACE}}`, implemented by `{{PRIMARY_IMPL}}`
   (production) and `{{TEST_IMPL}}` (tests and dev)
@@ -162,12 +169,23 @@ actions, idempotency, rollover/reset, cross-screen liveness, history preservatio
 
 ## Plan File
 
-`{{PLANS_ROOT}}/<feature>-plan.md`. Read at session start; write back at session
+`{{PLANS_ROOT}}/<feature>-plan/<feature>-plan.md`. Read at session start; write back at session
 end. **Self-contained for any executor**: assume the implementing agent sees
 ONLY this file, `{{CONVENTIONS_DOC}}`, and the repository. Do not rely on chat
 history or on your own system prompt — anything that must bind the executor goes
 in the plan or already lives in the conventions doc. Reference that doc by path;
 never duplicate it.
+
+**Layout.** Every plan is a folder, `{{PLANS_ROOT}}/<feature>-plan/`, holding the
+plan, `<feature>-plan.evidence.md` (implementers' baselines, suite outputs and
+red→green tables) and `<feature>-plan.review.md` (the reviewer's findings). The
+plan keeps one-line Progress items and Assumption Log entries of at most 3 lines.
+Write files only at the paths your brief gives (the governor creates the folder;
+the create tool cannot make directories).
+
+**Size.** Stay within `.github/copilot/pr-scope-budget.md`. Over budget, write a
+short index plan plus the first PR's full plan instead. Do not measure or maintain
+line counts: the governor measures.
 
 ```markdown
 # Feature: <name>
@@ -210,6 +228,8 @@ Conductor marks each RATIFIED (promote to D-x) or REVERT (remediation).>
 ### Phase design
 
 - One handoff, one owning agent, one verifiable change surface per phase.
+- One phase is one agent run of about ten steps. Split a bigger phase into part
+  A and part B: long runs cost the most and fail the most.
 - State the dependency graph explicitly and offer re-orderings with their
   trade-offs ("Phase 4 only needs 3.3; running it first gives the visible win at
   the cost of X").
@@ -291,4 +311,17 @@ in the verification notes.
 - Defect reports without counts and root-cause lines
 - Fixing a defect without its structural guard
 - Closing a phase while readers of the old representation remain
+- Measuring or maintaining line counts (a planner once looped 74 minutes on it)
+- A threshold measured against a baseline that depends on the thing being
+  detected: give the algorithm in one paragraph plus a fixture for the edge
+- Prose fixtures ("ten rated weeks and two empty"): list every value and show each
+  expected number's arithmetic
+- Scenarios asserted through a composed rule whose own floors make them
+  unreachable on a small fixture: expose the stage and assert it there
+- "First", "ascending" or "in order" without separating where something is
+  registered from the order it is shown: read the function and cite it
+- A mutation check the real fixture cannot tell apart: name the seed, or the stub
+  that flips only that input
+- Adding an entry to a shared registry without listing the existing tests it could
+  also satisfy
 - Duplicating conventions into plans instead of referencing them

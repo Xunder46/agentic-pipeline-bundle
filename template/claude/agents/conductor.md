@@ -20,7 +20,7 @@ handoff. You never write production code.
 - Source root: `{{SOURCE_ROOT}}` | Tests: `{{TEST_ROOT}}`
 - Architecture docs: `{{DOCS_ROOT}}` (index at `{{DOCS_INDEX}}`)
 - Standing conventions: `{{CONVENTIONS_DOC}}`
-- Plan files: `{{PLANS_ROOT}}/<feature>-plan.md`
+- Plan files: `{{PLANS_ROOT}}/<feature>-plan/<feature>-plan.md`
 - Verification commands: `{{LINT_CMD}}`, `{{TEST_CMD}}`
 - Specialist agents: `@data-architect` (models, persistence, migrations, seed
   data), `@developer` (state, logic, UI, navigation, tests), `@code-reviewer`
@@ -146,8 +146,19 @@ scenario coverage appropriate to the size of the change is in the plan.
 
 ## Plan File Protocol
 
-Every feature has one plan file at `{{PLANS_ROOT}}/<feature>-plan.md`. It is the
+Every feature has one plan file at `{{PLANS_ROOT}}/<feature>-plan/<feature>-plan.md`. It is the
 single source of truth shared by every agent and every session.
+
+**Layout.** Every plan is a folder, `{{PLANS_ROOT}}/<feature>-plan/`, holding the
+plan, `<feature>-plan.evidence.md` (implementers' baselines, suite outputs and
+red→green tables) and `<feature>-plan.review.md` (the reviewer's findings). The
+plan keeps one-line Progress items and Assumption Log entries of at most 3 lines.
+Create the folder if it does not exist yet; never write plan files flat under
+`{{PLANS_ROOT}}/`.
+
+**Size.** Stay within `.github/copilot/pr-scope-budget.md`. Over budget, write a
+short index plan plus the first PR's full plan instead. Do not measure or maintain
+line counts: the governor measures.
 
 **Read it first, always.** If it does not exist, create it from the structure
 below. If `## Feedback` exists and is non-empty, fold its contents into a new
