@@ -224,7 +224,7 @@ log_stats() {
     }
     stage == 1 && /^  │ / { c = $0; sub(/^  │ /, "", c); key = kind ": " sq(c); stage = 2; next }
     stage == 2 && /^  └ L[0-9]+:[0-9]+/ { r = $0; sub(/^  └ /, "", r); sub(/ .*/, "", r); key = key " " r; stage = 0; next }
-    /Permission denied and could not request permission/ { denied++ }
+    /Permission denied and could not request permission|Permission to run this tool was denied/ { denied++ }
     /^[[:space:]]*$/ || /^  [│└]/ { next }
     { stage = 0; x = tolower(sq($0)); if (length(x) >= 8) text[x]++ }
     END {

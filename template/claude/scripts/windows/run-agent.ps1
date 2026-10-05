@@ -226,7 +226,7 @@ function Get-LogStats([string]$log) {
     }
     if ($stage -eq 1 -and $l.StartsWith($bar)) { $key = $kind + ': ' + ($l.Substring(4) -replace '\s+', ' ').Trim(); $stage = 2; continue }
     if ($stage -eq 2 -and $l.StartsWith($corner) -and $l.Substring(4) -match '^(L[0-9]+:[0-9]+)') { $key = $key + ' ' + $Matches[1]; $stage = 0; continue }
-    if ($l -match 'Permission denied and could not request permission') { $r.Denied++ }
+    if ($l -match 'Permission denied and could not request permission|Permission to run this tool was denied') { $r.Denied++ }
     if ($l -match '^\s*$' -or $l.StartsWith($bar) -or $l.StartsWith($corner)) { continue }
     $stage = 0
     $x = ($l -replace '\s+', ' ').Trim().ToLowerInvariant()
