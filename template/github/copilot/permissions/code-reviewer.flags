@@ -1,0 +1,2 @@
+# Reviewer: reads everything, writes only the plan file (Feedback, verification notes).
+--allow-tool=write({{PLANS_GLOB}})

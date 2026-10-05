@@ -1,0 +1,3 @@
+# Planner: writes plan files and architecture docs only.
+--allow-tool=write({{PLANS_GLOB}})
+--allow-tool=write({{DOCS_GLOB}})

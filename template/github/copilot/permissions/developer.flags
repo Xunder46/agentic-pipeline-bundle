@@ -1,0 +1,2 @@
+# Developer: writes anywhere in the repo except the paths common.flags denies.
+--allow-tool=write

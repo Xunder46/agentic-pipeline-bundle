@@ -1,0 +1,70 @@
+# Agentic pipeline — project configuration.
+# Copy to your own file (e.g. my-project.config), fill it in, then run:
+#   bash agentic-pipeline/install/macos/install.sh --config my-project.config /path/to/your/repo
+#   pwsh -NoProfile -File agentic-pipeline\install\windows\install.ps1 -Config my-project.config -Target C:\path\to\repo   (Windows)
+#
+# This file is sourced by bash: use KEY="value", no spaces around "=". It holds NO secrets —
+# API keys live in your shell profile or keychain (see README §3).
+#
+# Leave a value empty ("") when the concept does not exist in your project: the installer writes
+# "(not used in this project)" and the agents skip every rule that mentions it.
+
+# ---- Required ------------------------------------------------------------------------------------
+PROJECT_NAME="Acme Ledger"
+STACK="TypeScript + React, Vitest, Prisma/Postgres"
+BASE_BRANCH="main"
+LINT_CMD="npm run lint"
+TEST_CMD="npm test"
+PLANS_ROOT="docs/plans"                 # no trailing slash; plans are $PLANS_ROOT/<feature>-plan.md
+CONVENTIONS_DOC="docs/conventions.md"   # created from a skeleton if it does not exist
+PLANNER_AGENT="conductor-v2"            # conductor-v2 (decision ledger, recommended) or conductor
+PLATFORM="macos"                        # macos (also Linux) or windows: which scripts are installed
+
+# ---- Layout --------------------------------------------------------------------------------------
+SOURCE_ROOT="src/"
+TEST_ROOT="tests/"
+DOCS_ROOT="docs/architecture/"
+DOCS_INDEX="docs/architecture/README.md"   # created from a skeleton if it does not exist
+DOC_STANDARD=""                            # optional: a doc of what docs may/may not contain
+MODEL_DIR="src/domain/models/"
+PERSISTENCE_DIR="src/data/"
+STATE_DIR="src/state/"
+UI_DIR="src/features/"
+SHARED_UI_DIR="src/components/"
+CORE_DIR="src/core/"
+DATA_INTERFACE="LedgerRepository"
+PRIMARY_IMPL="PrismaLedgerRepository"
+TEST_IMPL="InMemoryLedgerRepository"
+SCHEMA_ARTIFACT="prisma/schema.prisma"
+SEED_FILE="prisma/seed.ts"
+DESIGN_SYSTEM_DOC=""
+
+# ---- Other commands ------------------------------------------------------------------------------
+TYPECHECK_CMD="npm run typecheck"
+BUILD_CMD="npm run build"
+RUN_CMD="npm run dev"
+
+# ---- Pipeline behaviour --------------------------------------------------------------------------
+# Checks every change must leave clean, as one line of markdown (shown in briefs and AGENTS.md).
+INVARIANT_CHECKS='`grep -rn "console.log" src/` returns nothing; `grep -rl "from .*/data/prisma" src/state src/features` returns nothing'
+LONG_CMD_TIMEOUT=300        # seconds, for installs / codegen / builds (with-timeout.sh)
+TEST_TIMEOUT=900            # seconds, for the full test suite
+MAX_AGENT_MINUTES=90        # governor's cap on total agent time for one feature
+
+# Per-role Copilot models (written to .claude/pipeline.env; the runner applies them by role).
+# Empty = provider default (COPILOT_MODEL). A stronger model for planning and review usually pays off.
+PLANNER_MODEL=""
+DEVELOPER_MODEL=""
+REVIEWER_MODEL=""
+
+# Extra gateway checks for Copilot agents (their only shell access), separated by ";":
+#   name|timeout seconds|command[|requires-args]   — requires-args = refuse to run without file
+#   arguments (use it for formatters, so they never run on the whole tree).
+GATEWAY_EXTRA="codegen|300|npm run codegen; format|120|npx prettier --write|requires-args"
+
+# ---- Runner (.claude/pipeline.env) ---------------------------------------------------------------
+COPILOT_WRAPPER=""          # "with-opencode.sh" for OpenCode Go/Zen (mapped to .ps1 on Windows); "" otherwise
+WAIT_MINUTES=15             # each start/wait call returns after this many minutes
+MAX_RUN_MINUTES=120         # hard stop per run (0 = off)
+STALL_MINUTES=30            # stop when log AND diff are idle this long (0 = off)
+REPEAT_STOP=40              # stop when one agent action repeats this often (0 = off)
