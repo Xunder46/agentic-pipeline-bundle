@@ -205,6 +205,7 @@
 --deny-tool=write(.claude/**)
 --deny-tool=write(.github/agents/**)
 --deny-tool=write(.github/copilot/**)
+--deny-tool=write(.github/workflows/**)
 --deny-tool=write(.git/**)
 --deny-tool=write(AGENTS.md)
 --deny-tool=write(CLAUDE.md)

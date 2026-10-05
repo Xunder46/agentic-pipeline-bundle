@@ -63,6 +63,24 @@ checklist, then present findings and wait.
 
 If it passes, no plan edit is needed — present the approval and wait.
 
+## Scope Triage at Review
+
+Triage against `.github/copilot/pr-scope-budget.md` §1 "At review". When there are more than 6
+substantive findings (nits don't count), a design finding spans layers, or a second review round
+would be needed, recommend a split in the review file:
+
+- what to fix in this PR: the critical findings and the cheap mechanical ones, in one round;
+- what goes to a follow-up PR plan.
+
+Never propose a review → fix → review loop.
+
+## Reading for Intent
+
+To understand the change before reviewing code, read the conventions doc and **one** feature doc
+that matches the change (`{{DOCS_INDEX}}` locates it); skip docs unrelated to it. This cap governs
+intent-gathering only. It does **not** apply to 4d, which derives its own scope from the changed
+files and reads every implicated document, however many.
+
 ## Review Process
 
 ### Step 0 — Scope (do this before reading any file)
@@ -135,6 +153,8 @@ The implementer's claim that tests pass is not evidence that tests pass.
 - [ ] Confirm the handoff summary contains **actual pasted pass/fail counts**, not
       a claim of success. A summary asserting "all green" with no counts is a
       **CRITICAL** finding on its own.
+- [ ] Confirm the handoff's Docs section exists and names each implicated doc as
+      updated or "no update required"; a missing section is a **WARNING**.
 - [ ] Run `{{TEST_CMD}}` yourself and record the real result
 - [ ] For a bug fix: confirm the new test was **shown** to fail without the fix.
       A test that passes with and without the change proves nothing and is a
@@ -171,6 +191,8 @@ documentation diff, you have reproduced the exact bug it exists to catch.
 Until documents carry scope declarations, rule (4) implicates the whole set on
 most changes. That is correct conservative behavior, not a defect. Narrow it by
 adding scope declarations, never by guessing which documents to skip.
+A zero-implicated result is not reachable until documents carry scope
+declarations: reporting zero means the step was skipped, not completed.
 
 **The handoff summary is not the source of scope.** Derive scope from the changed
 files. Use the summary only to spot a claimed documentation update that did not
@@ -180,6 +202,7 @@ For each implicated document, check its claims against the **post-change** code:
 
 - [ ] Does any claim describe behavior the change altered or removed?
 - [ ] Does any named file, class, method, constant, or test still exist?
+      Look up every test a document cites by its exact group and test name.
 - [ ] Does any structural claim — what owns what, what routes where, what a
       component is responsible for — still hold?
 - [ ] Does any stated invariant still hold?

@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.1.1 — 2026-10-05
+
+Restored rules found missing by a line-by-line regression check of a project's migration to the bundle
+(old agent files against new, by meaning):
+
+- Reviewer: scope triage at review (more than 6 findings → fix critical and mechanical ones, plan the
+  rest, never review → fix → review); read one intent doc (the cap does not limit 4d); a
+  zero-implicated 4d result means the step was skipped; the handoff's Docs section is checked; cited
+  tests are looked up by exact group and test name.
+- Implementers: finish or roll back the item in progress before a scope stop.
+- Planners: re-invoked with scope moved out of an oversized PR, plan only that scope.
+- `/feature`: the governor's own "verification is observed output" rule; start from the docs index.
+- `/run-pipeline`: scope checks after each implementation agent and after the review.
+- Runner (macOS): `STRAY_LOOPS` health line for orphaned busy-loop shells.
+- Permissions: agents may not write `.github/workflows/**`.
+
 ## 1.1.0 — 2026-10-04
 
 Lessons from a project running this pipeline, plus fixes from an analysis of its run

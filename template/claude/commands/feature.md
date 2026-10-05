@@ -69,8 +69,12 @@ exactly the tool permissions in `.github/copilot/permissions/common.flags` + `<n
 10. **Machine hygiene.** Never start background load or stress experiments: stopping a background
     command does not stop its children (40 stray busy loops once ran 14 hours and made every suite 3x
     slower). If one is unavoidable, run it bounded in the foreground with a `trap` that kills it, then
-    count the processes with `ps` to prove they are gone. Act on the runner's `HIGH_LOAD` line.
+    count the processes with `ps` to prove they are gone. Act on the runner's `HIGH_LOAD` and `STRAY_LOOPS` lines.
 
+11. **Verification is observed output.** Lint passing is not a test run. A phase is done only when
+    you ran the tests yourself and read the pass/fail counts. A new test for a bug fix is shown to
+    fail without the fix (stash the source change, run it, restore). A hang, or a run you killed, is
+    a failure, not an inconclusive result.
 ## Cost
 
 Every model request re-sends the agent's whole context (typically 30–60k tokens; about 25k of it is
@@ -102,7 +106,8 @@ a single stuck loop of 577 requests about 29M, a fifth of the day. What keeps th
   backlog grow silently; it never blocks the run.
 
 ### 1. Understand
-Read only the parts of the repo this feature touches, plus the previous plan for the same area. Stop
+Read only the parts of the repo this feature touches, plus the previous plan for the same area. Start
+from `{{DOCS_INDEX}}` and the feature doc for the area. Stop
 and ask the user, in one batched message with a recommended default per question, if:
 - requirements are ambiguous and two reasonable readings lead to different behaviour users can see, or
 - a decision is hard to reverse (schema, data migration, public API, new dependency), or
@@ -246,6 +251,7 @@ The runner prints a HEALTH block so you do not have to gather it by hand:
 - `MODEL_REQUESTS` / `TOKENS` — requests so far (with the proxy), and Copilot's token totals at the end
 - `HUNG_CHILD` — a child process running ≥ 10 min at ~0% CPU (pid, elapsed, command)
 - `HIGH_LOAD` — the machine is saturated; timings are unreliable
+- `STRAY_LOOPS` — orphaned busy-loop shells (left by a stopped stress experiment) are running
 
 It auto-stops a run on `MAX_RUN_MINUTES`; on `REPEAT_STOP` repeats of one call (`loop`) or denials
 (`denied`); on a prose line repeated `max(200, 5 × REPEAT_STOP)` times (`filler`: the model has
@@ -260,7 +266,7 @@ those limits, you judge:
   names is collateral damage (e.g. a tree-wide formatter): stop the run at once. Recover by restoring
   only files whose content equals the formatter's output of their HEAD version, never files with real
   changes.
-- `HIGH_LOAD` → find the cause with `ps`; stop only processes you can prove are yours, and re-check by
+- `HIGH_LOAD` / `STRAY_LOOPS` → find the cause with `ps`; stop only processes you can prove are yours, and re-check by
   count before trusting timings.
 - Loops: in the fix brief, include the real failure output and say "if a fix fails twice, stop and
   report instead of re-running".

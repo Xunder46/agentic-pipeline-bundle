@@ -155,7 +155,8 @@ Create the folder if it does not exist yet; never write plan files flat under
 
 **Size.** Stay within `.github/copilot/pr-scope-budget.md`. Over budget, write a
 short index plan plus the first PR's full plan instead. Do not measure or maintain
-line counts: the governor measures.
+line counts: the governor measures. Re-invoked with scope moved out of an
+oversized PR, plan only that scope, within the same budget.
 
 **Read it first, always.** If it does not exist, create it from the structure
 below. If `## Feedback` exists and is non-empty, fold its contents into a new

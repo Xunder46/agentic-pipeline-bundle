@@ -37,7 +37,7 @@ Set `PLANNER_AGENT` in your config. The installer copies only that planner.
 | Agent | Copilot tools | May write | Shell |
 |---|---|---|---|
 | planner (`conductor-v2` / `conductor`) | view, grep, glob, create, edit, execute, update_todo | `PLANS_ROOT/**`, `DOCS_ROOT/**` | gateway only |
-| `data-architect`, `developer` | same | the whole repo except `.claude/`, `.github/agents/`, `.github/copilot/`, `.git/`, `AGENTS.md`, `CLAUDE.md` | gateway only |
+| `data-architect`, `developer` | same | the whole repo except `.claude/`, `.github/agents/`, `.github/copilot/`, `.github/workflows/`, `.git/`, `AGENTS.md`, `CLAUDE.md` | gateway only |
 | `code-reviewer` | same | `PLANS_ROOT/**` (the review file and the plan's Feedback) | gateway only |
 
 Profiles live in `.github/copilot/permissions/` (`common.flags` applies to every run). The runner

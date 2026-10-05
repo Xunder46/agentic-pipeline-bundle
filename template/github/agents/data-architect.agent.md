@@ -80,7 +80,7 @@ Write evidence (baselines, suite outputs, red→green tables, footprints) to
 `<plan>.evidence.md` in the plan's folder. In the plan itself, tick the checkbox
 with a one-line result, and keep Assumption Log entries to 3 lines or fewer.
 If the phase uncovers substantial unplanned work (a missing prerequisite, a new
-model, message, screen or migration), do not absorb it: get the suites green,
+model, message, screen or migration), do not absorb it: finish or roll back the item in progress, get the suites green,
 add at most 5 lines to the plan's Open Items, mark the phase **Blocked (scope)**,
 and stop.
 

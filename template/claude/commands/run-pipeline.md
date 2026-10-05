@@ -50,6 +50,11 @@ reorder, do not run them in parallel.
 
 Let it complete its full verification and produce its verdict.
 
+Run the `pr-scope-guard` skill after each implementation agent and after the
+review as well. If it calls for a split: stop where every item is done or not
+started and the suites are green, plan the moved scope with the planner, and
+report instead of continuing.
+
 ## Bounded auto-fix — exactly one pass
 
 After the review, sort the findings into **mechanical** and **decision**.

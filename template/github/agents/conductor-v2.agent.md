@@ -185,7 +185,8 @@ the create tool cannot make directories).
 
 **Size.** Stay within `.github/copilot/pr-scope-budget.md`. Over budget, write a
 short index plan plus the first PR's full plan instead. Do not measure or maintain
-line counts: the governor measures.
+line counts: the governor measures. Re-invoked with scope moved out of an
+oversized PR, plan only that scope, within the same budget.
 
 ```markdown
 # Feature: <name>
