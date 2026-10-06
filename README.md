@@ -56,6 +56,7 @@ resolves from one config file. macOS/Linux and Windows are both supported.
 | `template/github/copilot/permissions/` | Per-agent Copilot permission profiles (`common.flags` + one per agent) |
 | `template/github/copilot/gateway.conf` | The gateway's checks (generated from your config) |
 | `template/github/copilot/pr-scope-budget.md` | The PR scope budget: when a plan is too big, and how to split it |
+| `template/github/copilot/agent-rules.md` | The standing rules for every agent run, by role; the runner appends them to each prompt, so briefs never carry copies |
 | `template/github/copilot/scripts/macos/`, `windows/` | The gateway, per OS |
 | `template/AGENTS.pipeline.md` | Project-facts block written into `AGENTS.md` (read by both tools) |
 | `template/docs/` | Skeletons for the conventions doc and architecture index (created only if absent) |
@@ -143,7 +144,7 @@ Then open a new terminal **and restart Claude Code**. `copilot help environment`
 | Write allow | Planner: plans + docs. Reviewer: plans. Builders: anywhere in the repo | `<agent>.flags` |
 | Write deny | `.claude/`, `.github/agents/`, `.github/copilot/`, `.github/workflows/` (CI runs with the repo's secrets), `.git/`, `AGENTS.md`, `CLAUDE.md` | `common.flags` |
 | Secrets | Provider and GitHub tokens are stripped from the agent's shell environment | `common.flags` (`--secret-env-vars`) |
-| Gateway | Fixed checks with timeouts; arguments must stay inside the repo (no absolute, `~` or `..` paths); read-only git views with validated refs; `requires-args` stops formatters running on the whole tree and `new-files-only` keeps them off existing files; `delete-scratch` removes only an untracked `TEST_ROOT/zz_*` probe; output over 200 lines or 16 KB is summarised, full log in `.work/gateway/` | `.github/copilot/scripts/<os>/gateway.*` |
+| Gateway | Fixed checks with timeouts; tracked files a check deletes are restored and the check fails; arguments must stay inside the repo (no absolute, `~` or `..` paths); read-only git views with validated refs; `requires-args` stops formatters running on the whole tree and `new-files-only` keeps them off existing files; `delete-scratch` removes only an untracked `TEST_ROOT/zz_*` probe; output over 200 lines or 16 KB is summarised, full log in `.work/gateway/` | `.github/copilot/scripts/<os>/gateway.*` |
 | Runner | Never passes `--allow-all-tools`; refuses an agent with no profile; refuses a profile containing allow-all or a rule that allows an interpreter (`bash`, `pwsh`, `python`, `node`…) | `.claude/scripts/<os>/run-agent.*` |
 
 These rules were verified against Copilot CLI's actual behaviour: unapproved tools are denied
@@ -255,11 +256,13 @@ Artifacts: plans in your plans folder; briefs in `.work/<slug>/`; every run in `
 `.work/runs/<RUN_ID>/output.log`.
 
 HEALTH reports log and diff idle time, diff size, the most repeated tool call, permission denials,
-the most repeated line of prose, model request and error counts (with the proxy), Copilot's token
+the most repeated line of prose, the most re-read file, how long an implementer has gone without
+writing, model request and error counts (with the proxy), Copilot's token
 totals when a run ends, hung child processes, and a saturated machine. The runner stops a run by
 itself on `MAX_RUN_MINUTES` (`max_runtime`), on `REPEAT_STOP` repeats of one tool call (`loop`) or
 `REPEAT_STOP` denials (`denied`), on one line of prose repeated `max(200, 5 × REPEAT_STOP)` times
-(`filler`), or when the log and the diff are both idle for `STALL_MINUTES` (`stalled`). `STOP_REASON`
+(`filler`), when an implementer has changed no file after `NO_WRITE_STOP` minutes (`no_write`), or
+when the log and the diff are both idle for `STALL_MINUTES` (`stalled`). `STOP_REASON`
 says which.
 
 ---
@@ -282,6 +285,8 @@ says which.
 | `install: unresolved placeholders remain` | A placeholder has no config key: add the key (even empty) to your config |
 | `STOP_REASON: denied` | The agent kept trying commands its profile denies: re-brief with what it was after, or add a gateway check if the need is real |
 | `STOP_REASON: filler` | The model degenerated into repeated text: re-run with a shorter, ordered brief (a smaller step) |
+| `STOP_REASON: no_write` | The implementer only read: re-brief with code pointers (file + symbol per item), or set `NO_WRITE_STOP=0` for a deliberately read-only run |
+| `gateway: REVERTED: … deleted tracked files` | An agent deleted files through a test or build; the gateway restored them. Make the deletions the plan needs yourself (governor) |
 
 ---
 

@@ -61,6 +61,7 @@ $CopilotWrapper = Get-Setting 'COPILOT_WRAPPER' ''
 $MaxRunMinutes = [int](Get-Setting 'MAX_RUN_MINUTES' '120')
 $StallMinutes = [int](Get-Setting 'STALL_MINUTES' '30')
 $RepeatStop = [int](Get-Setting 'REPEAT_STOP' '40')
+$NoWriteStop = [int](Get-Setting 'NO_WRITE_STOP' '20')   # stop an implementer that has changed no file after this long; 0 = off
 $HungChildMinutes = [int](Get-Setting 'HUNG_CHILD_MINUTES' '10')
 # The macOS wrapper name maps to its Windows counterpart.
 if ($CopilotWrapper -eq 'with-opencode.sh') { $CopilotWrapper = 'with-opencode.ps1' }
@@ -97,6 +98,28 @@ function Get-Permissions([string]$agent) {
     }
   }
   return , $flags.ToArray()
+}
+
+# Implementers write code; planners and the reviewer legitimately change few or no files.
+function Test-Implementer([string]$agent) { $agent -notin 'conductor', 'conductor-v2', 'code-reviewer' }
+
+# The standing rules for one agent: the sections of .github/copilot/agent-rules.md headed
+# "## Every agent" or naming the agent in parentheses. Appended to every prompt, so briefs never carry
+# (possibly stale) copies of them.
+function Get-AgentRules([string]$agent) {
+  $file = Join-Path $RepoRoot '.github/copilot/agent-rules.md'
+  if (-not (Test-Path $file)) { return '' }
+  $out = @(); $inc = $false; $comment = $false
+  foreach ($l in (Get-Content -Path $file -Encoding UTF8)) {
+    if ($l.StartsWith('<!--')) { $comment = $true }
+    if ($comment) { if ($l -match '-->') { $comment = $false }; continue }
+    if ($l.StartsWith('## ')) {
+      $inc = $l.StartsWith('## Every agent')
+      if ($l -match '\(([^)]*)\)') { if (($Matches[1] -split '[ ,]+') -contains $agent) { $inc = $true } }
+    }
+    if ($inc) { $out += $l }
+  }
+  return ($out -join "`n")
 }
 
 function Get-RoleModel([string]$agent) {
@@ -142,6 +165,8 @@ function Invoke-Worker([string]$dir) {
   $promptFile = Read-Text (Join-Path $dir 'prompt_file')
   $model = Read-Text (Join-Path $dir 'model')
   $prompt = "Your task brief is in the file $promptFile. Read the whole file and carry it out. You cannot ask the user questions in this run. If something is unclear, make the most reasonable choice and list each such choice under an Open questions heading at the end of your final response."
+  $rules = Get-AgentRules $agent
+  if ($rules) { $prompt += "`n`nStanding rules for every run (a brief may add to them, never relax them):`n`n" + $rules }
   $flags = Get-Permissions $agent
   $copilotArgs = @('-p', $prompt, '--agent', $agent, '--no-ask-user') + $flags
   if ($model) { $copilotArgs += @('--model', $model) }
@@ -211,20 +236,24 @@ function Start-Run([string]$agent, [string]$promptFile, [string]$model) {
 #   Text              the most repeated prose line: a degenerating model writes the same filler line
 #                     thousands of times with no tool calls.
 function Get-LogStats([string]$log) {
-  $r = @{ Action = 0; ActionKey = '-'; Denied = 0; Text = 0 }
+  $r = @{ Action = 0; ActionKey = '-'; Denied = 0; Text = 0; Read = 0; ReadKey = '-' }
   if (-not (Test-Path $log)) { return $r }
   $dot = [string][char]0x25CF + ' '; $cross = [string][char]0x2717 + ' '
   $bar = '  ' + [char]0x2502 + ' '; $corner = '  ' + [char]0x2514 + ' '
-  $act = @{}; $text = @{}; $key = ''; $kind = ''; $stage = 0
+  $act = @{}; $text = @{}; $reads = @{}; $key = ''; $kind = ''; $stage = 0
   foreach ($l in (Get-Content -Path $log -Encoding UTF8)) {
-    if ($l.StartsWith($dot) -or $l.StartsWith($cross)) {
+    if ($l.StartsWith($dot) -or $l.StartsWith($cross) -or $l.StartsWith('/ ')) {
       if ($key) { $act[$key] = 1 + [int]$act[$key] }
       $t = (($l.Substring(2) -replace '\s+[0-9.]+m?s\s*$', '') -replace '\s+', ' ').Trim().ToLowerInvariant() -replace '[0-9]+', '#'
       $kind = if ($t -match '\(shell\)$') { 'shell' } else { ($t -split ' ')[0] }
       $key = $t; $stage = if ($kind -in 'edit', 'create') { 0 } else { 1 }
       continue
     }
-    if ($stage -eq 1 -and $l.StartsWith($bar)) { $key = $kind + ': ' + ($l.Substring(4) -replace '\s+', ' ').Trim(); $stage = 2; continue }
+    if ($stage -eq 1 -and $l.StartsWith($bar)) {
+      $c = ($l.Substring(4) -replace '\s+', ' ').Trim(); $key = $kind + ': ' + $c
+      if ($kind -eq 'read') { $reads[$c] = 1 + [int]$reads[$c] }
+      $stage = 2; continue
+    }
     if ($stage -eq 2 -and $l.StartsWith($corner) -and $l.Substring(4) -match '^(L[0-9]+:[0-9]+)') { $key = $key + ' ' + $Matches[1]; $stage = 0; continue }
     if ($l -match 'Permission denied and could not request permission|Permission to run this tool was denied') { $r.Denied++ }
     if ($l -match '^\s*$' -or $l.StartsWith($bar) -or $l.StartsWith($corner)) { continue }
@@ -239,6 +268,10 @@ function Get-LogStats([string]$log) {
     if ($r.ActionKey.Length -gt 100) { $r.ActionKey = $r.ActionKey.Substring(0, 100) }
   }
   if ($text.Count -gt 0) { $r.Text = [int]($text.Values | Measure-Object -Maximum).Maximum }
+  if ($reads.Count -gt 0) {
+    $top = $reads.GetEnumerator() | Sort-Object Value -Descending | Select-Object -First 1
+    $r.Read = [int]$top.Value; $r.ReadKey = [string]$top.Key
+  }
   return $r
 }
 # Prose repeats this often count as degeneration (well above any real report's repeated lines).
@@ -260,6 +293,9 @@ function Get-HungChildren([string]$dir) {
   return $out
 }
 
+# True while the run has changed no file in the working tree (its diff fingerprint never moved).
+function Test-NoWriteYet([string]$dir) { (Read-Text (Join-Path $dir 'diff_changed_epoch')) -eq (Read-Text (Join-Path $dir 'started_epoch')) }
+
 function Update-Health([string]$dir) {
   $fp = Get-DiffFingerprint
   if ($fp -ne (Read-Text (Join-Path $dir 'diff_fp'))) {
@@ -276,6 +312,9 @@ function Update-Health([string]$dir) {
     if ($st.Action -ge $RepeatStop) { Stop-Run $id 'loop' | Out-Null; return }
     if ($st.Denied -ge $RepeatStop) { Stop-Run $id 'denied' | Out-Null; return }
     if ($st.Text -ge (Get-FillerLimit)) { Stop-Run $id 'filler' | Out-Null; return }
+  }
+  if ($NoWriteStop -gt 0 -and (Test-Implementer (Read-Text (Join-Path $dir 'agent'))) -and (Test-NoWriteYet $dir) -and $elapsedMin -ge $NoWriteStop) {
+    Stop-Run $id 'no_write' | Out-Null; return
   }
   $log = Join-Path $dir 'output.log'
   if ($StallMinutes -gt 0 -and (Test-Path $log)) {
@@ -300,6 +339,10 @@ function Write-Health([string]$dir) {
   "  DIFF_FILES: $files · DIFF_IDLE_MIN: $(Get-MinutesSince ([long]$changed))"
   "  TOP_REPEAT: $($st.Action)x `"$($st.ActionKey)`" (auto-stop at $RepeatStop; 0 = off)"
   "  DENIED: $($st.Denied) · TOP_TEXT_REPEAT: $($st.Text)x (auto-stop at $(Get-FillerLimit))"
+  "  TOP_READ: $($st.Read)x `"$($st.ReadKey)`" (one file, any line range)"
+  if ((Test-Implementer (Read-Text (Join-Path $dir 'agent'))) -and (Test-NoWriteYet $dir) -and -not (Test-Path (Join-Path $dir 'exit'))) {
+    "  FIRST_WRITE: none yet after $(Get-MinutesSince ([long](Read-Text (Join-Path $dir 'started_epoch')))) min (auto-stop at $NoWriteStop; 0 = off)"
+  }
   $proxy = Join-Path $dir 'proxy.log'
   if (Test-Path $proxy) {
     $req = @(Select-String -Path $proxy -Pattern ' -> ').Count

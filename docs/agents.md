@@ -123,6 +123,7 @@ agents skip rules about it.
 | `WAIT_MINUTES` | Each `start`/`wait` call returns after this long | `15` |
 | `MAX_RUN_MINUTES` | Hard stop per run (0 = off) | `120` |
 | `STALL_MINUTES` | Stop when the log and the diff are both idle this long (0 = off) | `30` |
+| `NO_WRITE_STOP` | In `.claude/pipeline.env`: stop an implementer that has changed no file after this many minutes (0 = off) | `20` |
 | `REPEAT_STOP` | Stop when one tool call repeats, or this many calls are denied; filler text stops at `max(200, 5×)` this (0 = off) | `40` |
 
 ## Conventions the agents share
@@ -132,6 +133,9 @@ agents skip rules about it.
   phases, one-line progress and feedback; `<plan>.evidence.md` holds suite outputs and red→green tables,
   and `<plan>.review.md` the reviewer's findings, so the plan every agent re-reads stays short. Agents
   coordinate through it, not through chat history.
+- **Standing rules live in one file.** `.github/copilot/agent-rules.md` holds the rules every Copilot
+  run follows, by role; the runner appends them to the prompt. Briefs carry only run-specific content,
+  including code pointers (file + symbol per item).
 - **Scope budget.** A plan over budget (`.github/copilot/pr-scope-budget.md`) is split into PRs instead
   of growing; the governor measures, planners never count lines.
 - **Stable IDs.** Decisions are `D-1, D-2 …` and scenarios `S-001, S-002 …`. Both are numbered across

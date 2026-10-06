@@ -52,7 +52,7 @@ check_ref() {
 # Run "$@" in its own process group with a timeout; exit 124 on timeout (same as with-timeout.sh).
 run_with_timeout() {
   local secs="$1"; shift
-  exec perl -e '
+  perl -e '
     my $secs = shift @ARGV;
     my $pid = fork(); die "fork: $!\n" unless defined $pid;
     if ($pid == 0) { setpgrp(0, 0); exec { $ARGV[0] } @ARGV or do { print STDERR "gateway: cannot run $ARGV[0]: $!\n"; exit 127 } }
@@ -138,7 +138,7 @@ run_summarized() {
   mkdir -p "$dir"
   find "$dir" -name '*.log' -mtime +0 -delete 2> /dev/null || true
   log="$dir/$name-$(date +%Y%m%d-%H%M%S)-$$.log"
-  exec perl -e '
+  perl -e '
     my ($secs, $log, $rel, $over, $bytes) = splice(@ARGV, 0, 5); $| = 1;
     my $pid = fork(); die "fork: $!\n" unless defined $pid;
     if ($pid == 0) {
@@ -196,8 +196,33 @@ run_check() {
   local parts=()
   read -r -a parts <<< "$cmd"
   echo "gateway: $name (timeout ${secs}s): ${parts[*]} $*" >&2
-  if [[ $opts == *full-output* ]]; then run_with_timeout "$secs" "${parts[@]}" "$@"; fi
-  run_summarized "$name" "$secs" "${parts[@]}" "$@"
+  local before code=0
+  before="$(deleted_tracked)"
+  if [[ $opts == *full-output* ]]; then
+    run_with_timeout "$secs" "${parts[@]}" "$@" || code=$?
+  else
+    run_summarized "$name" "$secs" "${parts[@]}" "$@" || code=$?
+  fi
+  revert_deletions "$name" "$before" || { [[ $code -ne 0 ]] || code=3; }
+  exit "$code"
+}
+
+# Tracked files missing from the working tree, one per line.
+deleted_tracked() { git -c core.quotepath=off ls-files --deleted 2>/dev/null | sort || true; }
+
+# A check runs code the agent wrote (a test can do anything), so it is the one way around the
+# "no deletions" policy. Any tracked file a check deleted is restored, and the check fails.
+revert_deletions() {
+  local name="$1" before="$2" now gone
+  now="$(deleted_tracked)"
+  gone="$(comm -13 <(printf '%s\n' "$before" | sed '/^$/d') <(printf '%s\n' "$now" | sed '/^$/d'))"
+  [[ -z $gone ]] && return 0
+  while IFS= read -r f; do git checkout -- "$f" 2> /dev/null || true; done <<< "$gone"
+  { echo "gateway: REVERTED: '$name' deleted tracked files, which agents may not do through a check:"
+    printf '%s\n' "$gone" | sed 's/^/  /'
+    echo "List the deletions the work needs under \"Governor actions\" in your final report; the governor makes them."
+  } >&2
+  return 1
 }
 
 [[ $# -ge 1 ]] || { list_checks; exit 0; }

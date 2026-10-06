@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.2.0 — 2026-10-06
+
+From measuring 30 runs after 1.1: reliability improved (no loops, no degenerated runs, every phase
+green on first verify, chunked re-reads of spilled output 162 → 6), cost per line of change was flat,
+and per-run efficiency got worse in four ways this release addresses.
+
+- **Standing rules in one file.** `.github/copilot/agent-rules.md` (by role) is appended to every
+  prompt by the runner; `/feature` no longer has a paste-in footer. After 1.1, the governor kept
+  copying an outdated footer from earlier briefs (24 of 24 implementer briefs), so the new cost rules
+  never reached agents.
+- **No-write stop.** The runner stops an implementer that has changed no file after `NO_WRITE_STOP`
+  (default 20) minutes, and HEALTH shows `FIRST_WRITE` and `TOP_READ` (most re-read file across line
+  ranges). One run read for 30 minutes (plan 27×, two files 20× each) and wrote nothing.
+- **Built-in searches count** in loop detection (`/ Search` lines); with shell grep denied they grew 15×.
+- **Deletions through checks are reverted.** The gateway restores tracked files a check deleted and
+  fails the check; agents list needed deletions as "Governor actions" and the governor makes them. An
+  agent had deleted files by running a throwaway test through the gateway.
+- **Code pointers.** Briefs give file + symbol (+ line) per item; plan items name file and symbol.
+  The stalled phase's retry with pointers wrote files within 10 minutes.
+
 ## 1.1.1 — 2026-10-05
 
 Restored rules found missing by a line-by-line regression check of a project's migration to the bundle

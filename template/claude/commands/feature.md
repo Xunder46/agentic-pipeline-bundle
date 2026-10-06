@@ -49,8 +49,8 @@ exactly the tool permissions in `.github/copilot/permissions/common.flags` + `<n
    finding: log friction, and if the work truly needs it, stop and ask the user (`/retro` changes
    profiles).
 3. Never write or edit product code, tests or docs. Every change goes through an agent. The only files
-   you create or edit are under `.work/`; the only other thing you create is empty directories an agent
-   needs (Copilot's create tool cannot make directories).
+   you create or edit are under `.work/`; the only other changes you make are the empty directories and the file deletions a plan lists
+   (agents cannot make either, and the gateway reverts a deletion made through a check).
 4. Friction is record-only. Append entries to `.work/friction.md` in the format below. Do not fix,
    work around, or propose changes for anything you record, and do not mention fixes in your reports.
 5. Do not read full agent logs. Work from the runner summary. If you need more, search the log for
@@ -87,6 +87,9 @@ a single stuck loop of 577 requests about 29M, a fifth of the day. What keeps th
   the agent's context is compacted and it starts re-reading its brief.
 - **Point agents at plan sections**, not "read the plan": the decisions, the scenarios and the phase
   they implement. Agents re-read whole plans 8–40 times in a run.
+- **Give code pointers.** For each item, the file and the symbol (function, class or test) to change,
+  with an approximate line. A phase whose brief had none read for 30 minutes and wrote nothing; the
+  retry with pointers wrote files within 10.
 - **Closed fix briefs.** A fix brief names the defect, the change, and the one check that proves it,
   then "touch nothing else; if that check is not enough, stop and report". An open invitation ("also
   look for similar mistakes") turned a one-line fix into a 22-minute, 100-request investigation.
@@ -149,9 +152,14 @@ Owner-prerequisite gaps: plan and build everything the agents can verify without
 
 ### 3. Implement
 Run `data-architect` for the data phases first, verify and commit them, then the developer. Before each
-run, create any new directory the phase's Predicted Files need. Write `.work/<slug>/brief-<agent>-<phase>.md`:
-the approved plan path, the plan sections to read (decisions, scenarios, this phase), "implement the plan
-exactly, test-first from the scenario register", and the standard brief footer (below).
+run, create the new directories and make the file deletions the phase's Predicted Files list. Write
+`.work/<slug>/brief-<agent>-<phase>.md` with only what is specific to the run: the approved plan path;
+the plan sections to read (decisions, scenarios, this phase); "implement the plan exactly, test-first
+from the scenario register"; and **code pointers**: for each item, the file and the symbol to change,
+with an approximate line, collected while you validated the plan. Never paste standing rules into a
+brief: the runner appends `.github/copilot/agent-rules.md` (see Standing agent rules). After the run,
+carry out the "Governor actions" the agent listed (deletions, directories) when they are in the
+plan's scope; log the rest as friction.
 
 **One phase per run** (split a large phase into part A and part B): each phase then gets its own
 verify and commit checkpoint, a failure costs one phase, and the run stays short (see Cost). Give
@@ -234,7 +242,7 @@ finishes, and prints a summary. Read STATUS:
   This is the only way to wait; do not poll with sleeps.
 - `FAILED` → read the log tail. Retry once if it looks transient (network, rate limit, provider
   error); otherwise stop and report. Log friction either way.
-- `STOPPED` → STOP_REASON says why (`user`, `max_runtime`, `loop`, `denied`, `filler`, `stalled`). The
+- `STOPPED` → STOP_REASON says why (`user`, `max_runtime`, `loop`, `denied`, `filler`, `no_write`, `stalled`). The
   runner stopped it on its own for all but `user`: log friction, then re-brief with the cause (see
   below) or ask the user.
 - If the Bash call itself times out, read `.work/runs/latest.txt` for the RUN_ID and use `wait`.
@@ -248,6 +256,8 @@ The runner prints a HEALTH block so you do not have to gather it by hand:
 - `DIFF_FILES` / `DIFF_IDLE_MIN` — files changed so far, and minutes since that set last changed
 - `TOP_REPEAT` — the most repeated tool call (shell calls keyed on the command, reads on path and range)
 - `DENIED` / `TOP_TEXT_REPEAT` — permission denials, and the most repeated line of prose
+- `TOP_READ` — the file read most often across line ranges (re-reading is the main cost of a run)
+- `FIRST_WRITE` — an implementer that has changed no file yet, and for how long
 - `MODEL_REQUESTS` / `TOKENS` — requests so far (with the proxy), and Copilot's token totals at the end
 - `HUNG_CHILD` — a child process running ≥ 10 min at ~0% CPU (pid, elapsed, command)
 - `HIGH_LOAD` — the machine is saturated; timings are unreliable
@@ -255,7 +265,8 @@ The runner prints a HEALTH block so you do not have to gather it by hand:
 
 It auto-stops a run on `MAX_RUN_MINUTES`; on `REPEAT_STOP` repeats of one call (`loop`) or denials
 (`denied`); on a prose line repeated `max(200, 5 × REPEAT_STOP)` times (`filler`: the model has
-degenerated); and when both the log and the diff are idle for `STALL_MINUTES` (`stalled`). Between
+degenerated); when an implementer has changed no file after `NO_WRITE_STOP` minutes (`no_write`: re-brief
+with code pointers); and when both the log and the diff are idle for `STALL_MINUTES` (`stalled`). Between
 those limits, you judge:
 - `HUNG_CHILD` present → kill that child process only (never the runner or the agent), log friction,
   tell the user. If the same command hangs twice, stop the run and re-brief with the timeout wrapper
@@ -271,34 +282,13 @@ those limits, you judge:
 - Loops: in the fix brief, include the real failure output and say "if a fix fails twice, stop and
   report instead of re-running".
 
-## Standard brief footer (paste into every developer / data-architect / reviewer brief)
+## Standing agent rules
 
-```
-Shell: your only shell command is the gateway, `{{GATEWAY}}`, spelled exactly like that and never
-piped or chained (`{{GATEWAY}} list` shows the checks; each runs with its own timeout). Everything
-else is denied by policy: read and search with your file tools. A denied command is never retried, in
-any spelling; record what you needed under Open questions. Exit 124 means a check timed out: diagnose
-it, never re-run it unchanged. If a fix fails twice, stop and report; never run the same failing check
-a third time. Long output is saved under .work/gateway/ and summarised: read the log by line range
-only when the summary is not enough.
-Turns: every turn calls a tool; never write filler text. Do not re-read a file section you already
-have unless you changed it.
-Git and pipeline: do not commit, push, reset or switch branches; do not touch .claude/, .github/agents/,
-.github/copilot/ or AGENTS.md.
-Files: create no scratch or probe files; remove one you made with `{{GATEWAY}} delete-scratch`. Run
-formatters only on files you created, by explicit path. Edit existing files with minimal edits, then
-check them with `{{GATEWAY}} git-diff --stat`: a diff bigger than your edit means undo and report.
-Tests: no real-clock thresholds (bracket between timestamps, or poll to a deadline). Every new guard is
-shown red first, or by a mutation: record the original line, change it, see the test fail, restore the
-EXACT original, re-run green; never end a step with a mutation applied. If a change turns an EXISTING
-test red that the plan did not predict, stop and report; do not edit that test. If a step's text
-contradicts the plan's decisions, follow the decisions and log it in the Assumption Log.
-Plan: update the plan's Progress table (one line per item) and Assumption Log as phases complete; put
-baselines, suite outputs and red/green tables in the plan's .evidence.md, never in the plan.
-Before finishing: `{{GATEWAY}} lint` clean, full `{{GATEWAY}} test` green (paste the real counts), the
-project invariant checks clean ({{INVARIANT_CHECKS}}), and the plan's own residue sweeps.
-```
-
+The rules every agent follows (shell, reading, files, tests, plan bookkeeping, finishing checks) live
+in `.github/copilot/agent-rules.md`. The runner appends the sections for the agent's role to every
+prompt, so a brief carries only what is specific to its run. Never copy rules from an older brief:
+copies go stale (after the rules last changed, an outdated footer spread through 24 consecutive
+briefs). To change a rule, change that file, through `/retro`.
 ## Friction log
 
 Append to `.work/friction.md` (create it if missing) whenever:

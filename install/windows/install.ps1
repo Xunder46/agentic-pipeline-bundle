@@ -124,6 +124,7 @@ try {
   Copy-Into (Join-Path $Template 'github/copilot/permissions') (Join-Path $Stage '.github/copilot/permissions')
   Copy-Into (Join-Path $Template 'github/copilot/gateway.conf') (Join-Path $Stage '.github/copilot/gateway.conf')
   Copy-Into (Join-Path $Template 'github/copilot/pr-scope-budget.md') (Join-Path $Stage '.github/copilot/pr-scope-budget.md')
+  Copy-Into (Join-Path $Template 'github/copilot/agent-rules.md') (Join-Path $Stage '.github/copilot/agent-rules.md')
   Copy-Into (Join-Path $Template "github/copilot/scripts/$Platform") (Join-Path $Stage ".github/copilot/scripts/$Platform")
   Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $Stage ".github/agents/$other.agent.md"), (Join-Path $Stage ".github/copilot/permissions/$other.flags")
   if (-not $Only) {

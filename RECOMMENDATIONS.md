@@ -34,6 +34,9 @@ The first section shows how this bundle guards against each. The second shows wh
 | 18 | **`new-files-only` formatters and `delete-scratch`** in the gateway | A formatter turning a 4-line edit into a 400-line diff; probe files the agent cannot delete left for the owner |
 | 19 | **One folder per plan, with evidence and review files beside it, and a scope budget** (`pr-scope-budget.md`, `pr-scope-guard`) | Plans growing to thousands of lines of evidence and review text that every agent then re-reads; one PR that should have been three |
 | 20 | **Plan validation by re-derivation**: the governor re-implements non-trivial rules in a script and checks every fixture number, reads the function behind each "the framework does X" claim | Circular definitions, wrong arithmetic and wrong ordering claims reaching implementers, who then loop trying to satisfy an impossible scenario |
+| 21 | **Standing agent rules in one file the runner injects** (`agent-rules.md`) | A rule change never reaching agents because each brief copies the previous brief's footer |
+| 22 | **No-write stop and `TOP_READ`**: an implementer that has written nothing after 20 minutes is stopped | Runs that read the same plan and files dozens of times and write nothing |
+| 23 | **The gateway reverts deletions made through a check**; the governor makes planned deletions | An agent routing around "no deletions" by writing a test that deletes files |
 
 ## 2. Where the tokens go
 
@@ -54,6 +57,12 @@ fast model):
   mistakes" ran 22 minutes and 100 requests, mostly reading compiler and SDK files it had no way to
   check. Closed fix briefs and "never ask an agent to verify what its tools cannot check" are now in
   `/feature`.
+- **Rules only help if they reach the agent.** After a rules change, governors kept pasting the
+  previous brief's footer into new briefs, so none of the new rules arrived. The runner now injects the
+  rules itself.
+- **Reading without writing is the next waste after loops.** With exact-repeat loops caught, the costly
+  runs became ones that re-read the plan and a few files 20–27 times without editing. Concrete code
+  pointers in the brief fixed the one measured case within 10 minutes.
 - **Plan defects cost the most time.** Most re-runs traced back to the plan: circular definitions,
   wrong fixture arithmetic, ordering claims nobody had read the code for, scenarios a rule's own floors
   made unreachable. Two implementer runs degenerated into filler trying to satisfy one of them.

@@ -211,7 +211,7 @@ of the change → guarded by <S-id or D-x> or <open — Qn>. An entry may not re
 ## Scenarios
 ## Iteration N
 ### Phase X: <name> (@agent)
-1. [ ] <imperative, file-specific item>
+1. [ ] <imperative item> — `<file>` · `<symbol: function, class or test>`
 **Done Criteria** (run until green): `{{GATEWAY}} lint`, `{{GATEWAY}} test <phase suites>`, <phase-specific check>
 **Predicted Files**: <paths this phase should touch — nothing else>
 **Phase X verification notes (Conductor, date):** <added at verification>
@@ -305,7 +305,7 @@ in the verification notes.
 - Multi-turn question drip; questions without defaults
 - Decisions living only in chat history
 - Editing a Ledger entry instead of superseding it
-- "Update X" items without paths and rules
+- "Update X" items without paths, symbols and rules (an item an implementer must research before editing costs a whole run of reading)
 - Scenarios without fixtures — unstated fixture populations become bugs with
   perfect fidelity
 - Accepting "phase complete" without a diff

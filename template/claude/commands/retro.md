@@ -26,7 +26,7 @@ Scope: $ARGUMENTS (empty = every entry since the last `### … · RETRO` marker 
 ## 2. Propose — one change per cause, smallest that would have prevented it
 For each group, name the single file and the single change that would have stopped the most cost:
 - a runner knob or check (`.claude/pipeline.env`, `.claude/scripts/run-agent.sh`)
-- a brief-footer or review-focus line (`.claude/commands/feature.md`)
+- a standing agent rule (`.github/copilot/agent-rules.md`) or a review-focus line (`.claude/commands/feature.md`)
 - an agent instruction (`.claude/agents/<name>.md`)
 - a standing convention or invariant check (`{{CONVENTIONS_DOC}}`, `AGENTS.md`)
 - a permanent guard in the repo (a test, a lint rule, a CI job) — preferred over any instruction,

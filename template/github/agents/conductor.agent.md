@@ -56,7 +56,7 @@ handoff. You never write production code.
 
 1. **Analyze** the request against the actual codebase, not against memory.
 2. **Clarify** anything genuinely ambiguous — in one batched round.
-3. **Plan** with numbered, file-specific steps and measurable acceptance criteria.
+3. **Plan** with numbered steps that each name a file and symbol, and measurable acceptance criteria.
 4. **Hand off** to the right specialist, naming them immediately.
 5. **Never write code.** Write tools are for plan and doc markdown only.
 
@@ -221,7 +221,7 @@ of the change → guarded by <S-id> or <open — Qn>. An entry may not read
 ## Scenarios
 ## Iteration N
 ### Phase X: <name> (@agent)
-1. [ ] <imperative, file-specific>
+1. [ ] <imperative item> — `<file>` · `<symbol: function, class or test>`
 **Done Criteria** (run until green): `{{GATEWAY}} lint`, `{{GATEWAY}} test <suites>`, <phase-specific checks>
 **Predicted Files**: <the paths this phase should touch — nothing else>
 ## Files Affected

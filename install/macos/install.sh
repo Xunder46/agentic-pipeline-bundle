@@ -128,7 +128,7 @@ OTHER_PLANNER=conductor; [[ $PLANNER_AGENT == conductor ]] && OTHER_PLANNER=cond
 mkdir -p "$STAGE/.github/copilot/scripts"
 cp -R "$TEMPLATE/github/agents" "$STAGE/.github/"
 cp -R "$TEMPLATE/github/copilot/permissions" "$STAGE/.github/copilot/"
-cp "$TEMPLATE/github/copilot/gateway.conf" "$TEMPLATE/github/copilot/pr-scope-budget.md" "$STAGE/.github/copilot/"
+cp "$TEMPLATE/github/copilot/gateway.conf" "$TEMPLATE/github/copilot/pr-scope-budget.md" "$TEMPLATE/github/copilot/agent-rules.md" "$STAGE/.github/copilot/"
 cp -R "$TEMPLATE/github/copilot/scripts/$PLATFORM" "$STAGE/.github/copilot/scripts/"
 rm -f "$STAGE/.github/agents/$OTHER_PLANNER.agent.md" "$STAGE/.github/copilot/permissions/$OTHER_PLANNER.flags"
 

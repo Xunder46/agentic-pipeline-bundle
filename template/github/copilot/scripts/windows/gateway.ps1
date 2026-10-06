@@ -129,11 +129,28 @@ function Invoke-WithTimeout([int]$secs, [string[]]$parts, [string]$log = '') {
     Remove-Item "$log.out", "$log.err" -ErrorAction SilentlyContinue
     Write-CheckOutput $exe $log
   }
+  # The exit code goes in a script variable: anything returned would mix into the printed output.
   if ($timedOut) {
     [Console]::Error.WriteLine("gateway: TIMEOUT after ${secs}s: $($parts -join ' ')")
-    exit 124
+    $script:CheckExit = 124
+  } else {
+    $script:CheckExit = $p.ExitCode
   }
-  exit $p.ExitCode
+}
+
+# Tracked files missing from the working tree.
+function Get-DeletedTracked { @(& git -c core.quotepath=off ls-files --deleted 2>$null | Where-Object { $_ }) }
+
+# A check runs code the agent wrote (a test can do anything), so it is the one way around the
+# "no deletions" policy. Any tracked file a check deleted is restored, and the check fails.
+function Undo-Deletions([string]$name, [string[]]$before) {
+  $gone = @(Get-DeletedTracked | Where-Object { $before -notcontains $_ })
+  if ($gone.Count -eq 0) { return $true }
+  foreach ($f in $gone) { & git checkout -- $f 2>$null | Out-Null }
+  [Console]::Error.WriteLine("gateway: REVERTED: '$name' deleted tracked files, which agents may not do through a check:")
+  foreach ($f in $gone) { [Console]::Error.WriteLine("  $f") }
+  [Console]::Error.WriteLine('List the deletions the work needs under "Governor actions" in your final report; the governor makes them.')
+  return $false
 }
 
 function Invoke-Check([string]$name, [string[]]$extra) {
@@ -154,12 +171,20 @@ function Invoke-Check([string]$name, [string[]]$extra) {
   }
   $parts = @($e.Command -split '\s+' | Where-Object { $_ -ne '' }) + $extra
   [Console]::Error.WriteLine("gateway: $name (timeout $($e.Timeout)s): $($parts -join ' ')")
-  if ($e.Options -match 'full-output') { Invoke-WithTimeout ([int]$e.Timeout) $parts }
-  $dir = Join-Path $root '.work/gateway'
-  New-Item -ItemType Directory -Force -Path $dir | Out-Null
-  Get-ChildItem $dir -Filter '*.log' -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-1) } | Remove-Item -ErrorAction SilentlyContinue
-  $log = Join-Path $dir ('{0}-{1}-{2}.log' -f $name, (Get-Date -Format 'yyyyMMdd-HHmmss'), $PID)
-  Invoke-WithTimeout ([int]$e.Timeout) $parts $log
+  $before = Get-DeletedTracked
+  $script:CheckExit = 0
+  if ($e.Options -match 'full-output') {
+    Invoke-WithTimeout ([int]$e.Timeout) $parts
+  } else {
+    $dir = Join-Path $root '.work/gateway'
+    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    Get-ChildItem $dir -Filter '*.log' -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-1) } | Remove-Item -ErrorAction SilentlyContinue
+    $log = Join-Path $dir ('{0}-{1}-{2}.log' -f $name, (Get-Date -Format 'yyyyMMdd-HHmmss'), $PID)
+    Invoke-WithTimeout ([int]$e.Timeout) $parts $log
+  }
+  $code = $script:CheckExit
+  if (-not (Undo-Deletions $name $before) -and $code -eq 0) { $code = 3 }
+  exit $code
 }
 
 # Lets an agent remove its OWN probe file: only an untracked regular file under $ScratchPrefix.
