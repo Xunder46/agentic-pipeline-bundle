@@ -193,6 +193,10 @@ ${hangs}"
   fi
   local args=(-p "$prompt" --agent "$agent" --no-ask-user "${PERM_FLAGS[@]}")
   if [[ $COPILOT_NO_CUSTOM_INSTRUCTIONS == 1 ]]; then args+=(--no-custom-instructions); fi
+  # Agents never need GitHub access (git and PRs belong to the governor): no built-in GitHub MCP
+  # server, so neither its tools nor its instructions reach the agent. Exact usage goes to a file,
+  # which also covers runs that end without printing their token line.
+  args+=(--disable-builtin-mcps --usage-output-file "$dir/usage.json")
   if [[ -n $model ]]; then args+=(--model "$model"); fi
   export OPENCODE_SESSION="copilot-$(basename "$dir")"   # one stable session per run
   export OPENCODE_PROXY_LOG="$dir/proxy.log"              # kept with the run (with-opencode.sh)

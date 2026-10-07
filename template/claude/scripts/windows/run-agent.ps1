@@ -191,6 +191,9 @@ function Invoke-Worker([string]$dir) {
   if ($hangs) { $prompt += "`n`nKnown long-running or hanging commands in this repository:`n`n" + $hangs }
   $copilotArgs = @('-p', $prompt, '--agent', $agent, '--no-ask-user') + $flags
   if ($NoCustomInstructions) { $copilotArgs += '--no-custom-instructions' }
+  # Agents never need GitHub access (git and PRs belong to the governor): no built-in GitHub MCP
+  # server. Exact usage goes to a file, which also covers runs that end without a token line.
+  $copilotArgs += @('--disable-builtin-mcps', '--usage-output-file', (Join-Path $dir 'usage.json'))
   if ($model) { $copilotArgs += @('--model', $model) }
   $env:OPENCODE_SESSION = 'copilot-' + (Split-Path -Leaf $dir)
   $env:OPENCODE_PROXY_LOG = Join-Path $dir 'proxy.log'

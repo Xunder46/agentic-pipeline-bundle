@@ -8,7 +8,11 @@
   file. The one section only `AGENTS.md` holds, "Known long-running or hanging commands", is injected
   into the prompt by the runner. Expected saving: the size of those files on every request (a few
   percent of each request). Set 0 to restore the old behaviour.
-- Regression suite: 31 checks (option passed, hang notes injected, setting off).
+- Confirmed on Copilot CLI (`copilot instruction list`): agent runs were loading both `AGENTS.md` and
+  `CLAUDE.md`, about 4,300 tokens on every request in the project measured (~7% of a request).
+- Agents also run with `--disable-builtin-mcps` (no GitHub MCP server: agents never need GitHub
+  access) and `--usage-output-file .work/runs/<RUN_ID>/usage.json` (exact usage, even for stopped runs).
+- Regression suite: 33 checks.
 
 ## 1.3.1 — 2026-10-07
 

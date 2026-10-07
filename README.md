@@ -237,7 +237,7 @@ In Claude Code, in the target repo, on a clean tree: `/feature Add CSV export of
 | 7 Wrap up | Checks status hygiene and writes the friction summary | Run any **(owner)** checks the plan lists |
 
 Artifacts: plans in your plans folder; briefs in `.work/<slug>/`; every run in `.work/runs/<RUN_ID>/`
-(`output.log`, `exit`, `proxy.log`, git snapshots); process notes in `.work/friction.md`.
+(`output.log`, `exit`, `proxy.log`, `usage.json` with Copilot's exact token usage, git snapshots); process notes in `.work/friction.md`.
 
 ### 7.2 Mode A commands (Claude Code subagents)
 

@@ -100,6 +100,8 @@ o=.work/runs/$(cat .work/runs/latest.txt)/output.log
 ok "rules injected for an implementer" "$(grep -c '^## Implementers' "$o")" "1"
 ok "no unresolved placeholder in the prompt" "$(grep -c '{{' "$o")" "0"
 ok "agents run with --no-custom-instructions" "$(grep -c '^ARG --no-custom-instructions$' "$o")" "1"
+ok "built-in GitHub MCP server disabled" "$(grep -c '^ARG --disable-builtin-mcps$' "$o")" "1"
+ok "usage written to the run folder" "$(grep -c '^ARG --usage-output-file$' "$o")" "1"
 ok "AGENTS.md known hangs injected into the prompt" "$(grep -c 'slow.sh. hangs for 30 s' "$o")" "1"
 COPILOT_NO_CUSTOM_INSTRUCTIONS=0 COPILOT_BIN="$PWD/stub.sh" COPILOT_WRAPPER= bash $R start developer .work/t/brief.md > /dev/null 2>&1
 o=.work/runs/$(cat .work/runs/latest.txt)/output.log
