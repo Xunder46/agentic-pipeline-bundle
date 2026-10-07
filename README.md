@@ -61,6 +61,7 @@ resolves from one config file. macOS/Linux and Windows are both supported.
 | `template/AGENTS.pipeline.md` | Project-facts block written into `AGENTS.md` (read by both tools) |
 | `template/docs/` | Skeletons for the conventions doc and architecture index (created only if absent) |
 | `docs/agents.md` | Agent roster, configuration-key reference, shared conventions |
+| `tests/macos/regression.sh` | Installs the bundle into a throwaway repo and checks every gateway and runner guard (28 checks); run it after changing scripts or the installer |
 | `RECOMMENDATIONS.md` | Why the pipeline works the way it does, and improvements worth considering |
 
 `template/claude/` and `template/github/` are installed as `.claude/` and `.github/`. They are stored

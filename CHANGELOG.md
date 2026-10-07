@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.1 — 2026-10-07
+
+- `tests/macos/regression.sh`: one command that installs the bundle into a throwaway repo and checks
+  every gateway and runner guard added in 1.1–1.3 (28 checks). The Windows scripts remain unexecuted.
+- Measured after 1.3 (one night, 15 runs): fix rounds fell from 19% to 10% of tokens, no run briefed
+  under 1.3 lasted 45 minutes, `prove-red` caught two tests that proved nothing before review, and the
+  no-write stop fired once. Tokens per changed line stayed at ~27k, as in every version so far.
+
 ## 1.3.0 — 2026-10-06
 
 Measured on a full day after 1.2: the same output as the previous day for 14% fewer tokens per PR,
