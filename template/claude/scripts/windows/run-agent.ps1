@@ -64,6 +64,10 @@ $RepeatStop = [int](Get-Setting 'REPEAT_STOP' '40')
 $NoWriteStop = [int](Get-Setting 'NO_WRITE_STOP' '20')   # stop an implementer that has changed no file after this long; 0 = off
 $LongRunMinutes = [int](Get-Setting 'LONG_RUN_MINUTES' '30')   # warn when an implementer run passes this long; 0 = off
 $NoCustomInstructions = (Get-Setting 'COPILOT_NO_CUSTOM_INSTRUCTIONS' '1') -eq '1'   # agents do not auto-load AGENTS.md / CLAUDE.md
+$ReasoningEffort = Get-Setting 'COPILOT_REASONING_EFFORT' 'max'   # none|minimal|low|medium|high|xhigh|max; empty = model default
+if ($ReasoningEffort -notin '', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max') {
+  [Console]::Error.WriteLine("COPILOT_REASONING_EFFORT must be empty or one of none|minimal|low|medium|high|xhigh|max (got '$ReasoningEffort')"); exit 2
+}
 $HungChildMinutes = [int](Get-Setting 'HUNG_CHILD_MINUTES' '10')
 # The macOS wrapper name maps to its Windows counterpart.
 if ($CopilotWrapper -eq 'with-opencode.sh') { $CopilotWrapper = 'with-opencode.ps1' }
@@ -195,6 +199,7 @@ function Invoke-Worker([string]$dir) {
   # server. Exact usage goes to a file, which also covers runs that end without a token line.
   $copilotArgs += @('--disable-builtin-mcps', '--usage-output-file', (Join-Path $dir 'usage.json'))
   if ($model) { $copilotArgs += @('--model', $model) }
+  if ($ReasoningEffort) { $copilotArgs += @('--reasoning-effort', $ReasoningEffort) }
   $env:OPENCODE_SESSION = 'copilot-' + (Split-Path -Leaf $dir)
   $env:OPENCODE_PROXY_LOG = Join-Path $dir 'proxy.log'
   $log = Join-Path $dir 'output.log'

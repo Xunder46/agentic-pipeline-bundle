@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.0 — 2026-10-07
+
+- **Reasoning effort is a setting** (`COPILOT_REASONING_EFFORT`, default `max`; empty = the model's
+  default), passed as `--reasoning-effort` to every agent run. Reasoning is billed as output and slows
+  requests; max suits a cheap, fast model. Verify the provider accepts it with one small run.
+- Regression suite: 36 checks.
+
 ## 1.4.0 — 2026-10-07
 
 - **Agents run with `--no-custom-instructions`** (setting `COPILOT_NO_CUSTOM_INSTRUCTIONS`, default 1).

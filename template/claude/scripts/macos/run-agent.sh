@@ -17,7 +17,7 @@
 # Written for the bash 3.2 that ships with macOS; needs git, perl and pgrep, nothing from Homebrew.
 set -euo pipefail
 
-CONFIG_KEYS="WAIT_MINUTES TAIL_LINES POLL_SECONDS COPILOT_BIN COPILOT_WRAPPER MAX_RUN_MINUTES STALL_MINUTES REPEAT_STOP NO_WRITE_STOP LONG_RUN_MINUTES COPILOT_NO_CUSTOM_INSTRUCTIONS HUNG_CHILD_MINUTES PLANNER_MODEL DEVELOPER_MODEL REVIEWER_MODEL"
+CONFIG_KEYS="WAIT_MINUTES TAIL_LINES POLL_SECONDS COPILOT_BIN COPILOT_WRAPPER MAX_RUN_MINUTES STALL_MINUTES REPEAT_STOP NO_WRITE_STOP LONG_RUN_MINUTES COPILOT_NO_CUSTOM_INSTRUCTIONS COPILOT_REASONING_EFFORT HUNG_CHILD_MINUTES PLANNER_MODEL DEVELOPER_MODEL REVIEWER_MODEL"
 
 ORIG_PWD="$PWD"
 SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
@@ -53,6 +53,10 @@ load_config() {
   : "${NO_WRITE_STOP:=20}"        # stop an implementer that has changed no file after this long; 0 = off
   : "${LONG_RUN_MINUTES:=30}"     # warn when an implementer run passes this long (one concern per run); 0 = off
   : "${COPILOT_NO_CUSTOM_INSTRUCTIONS:=1}"  # 1 = agents do not auto-load AGENTS.md / CLAUDE.md (see worker)
+  : "${COPILOT_REASONING_EFFORT=max}"     # none|minimal|low|medium|high|xhigh|max; empty = model default
+  case "$COPILOT_REASONING_EFFORT" in ""|none|minimal|low|medium|high|xhigh|max) ;;
+    *) echo "COPILOT_REASONING_EFFORT must be empty or one of none|minimal|low|medium|high|xhigh|max (got '$COPILOT_REASONING_EFFORT')" >&2; exit 2 ;;
+  esac
   : "${HUNG_CHILD_MINUTES:=10}"   # report a child process idle (≈0% CPU) this long
   : "${PLANNER_MODEL=}" "${DEVELOPER_MODEL=}" "${REVIEWER_MODEL=}"   # empty = provider default
 }
@@ -198,6 +202,7 @@ ${hangs}"
   # which also covers runs that end without printing their token line.
   args+=(--disable-builtin-mcps --usage-output-file "$dir/usage.json")
   if [[ -n $model ]]; then args+=(--model "$model"); fi
+  if [[ -n $COPILOT_REASONING_EFFORT ]]; then args+=(--reasoning-effort "$COPILOT_REASONING_EFFORT"); fi
   export OPENCODE_SESSION="copilot-$(basename "$dir")"   # one stable session per run
   export OPENCODE_PROXY_LOG="$dir/proxy.log"              # kept with the run (with-opencode.sh)
   local cmd=()
