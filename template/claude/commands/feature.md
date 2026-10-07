@@ -50,7 +50,8 @@ exactly the tool permissions in `.github/copilot/permissions/common.flags` + `<n
    profiles).
 3. Never write or edit product code, tests or docs. Every change goes through an agent. The only files
    you create or edit are under `.work/`; the only other changes you make are the empty directories and the file deletions a plan lists
-   (agents cannot make either, and the gateway reverts a deletion made through a check).
+   (agents cannot make either, and the gateway reverts a deletion made through a check). You also write the seed of each plan (step 2):
+   its decisions, core scenarios and phase outline.
 4. Friction is record-only. Append entries to `.work/friction.md` in the format below. Do not fix,
    work around, or propose changes for anything you record, and do not mention fixes in your reports.
 5. Do not read full agent logs. Work from the runner summary. If you need more, search the log for
@@ -126,12 +127,33 @@ file paths inside that folder, and these lines:
 "Do not measure or maintain line counts; the governor measures the plan." (A planner once looped 74
 minutes re-counting lines.)
 
+**Seed the plan first: write the part a plan most often gets wrong.** Every plan revision so far
+traced to a decision or a scenario: a misapplied rule, a false "the framework does X", a circular
+definition, a missing case. You read that code in step 1, so write these sections into the plan file
+yourself before the planner runs, and keep a copy as `.work/<slug>/seed.md`:
+- **Goal and acceptance criteria.**
+- **Decision Ledger:** each `D-n` an enforceable rule (the math, the fallback, the exact matching),
+  checked against the code; cite the `file:symbol` behind any claim about existing behaviour.
+- **Core scenarios:** each `S-n` with the exact fixture, the expected outcome, and why it fails
+  without the change (what `prove-red` will check).
+- **Phase outline:** name, owning agent and goal per phase, in order, each small enough for 8 items.
+- **Code pointers:** the files and symbols each phase changes.
+
+Keep the seed short (about 100–150 lines) and leave everything mechanical to the planner. Add to the
+planner brief: "This plan is seeded. Its Ledger entries, scenarios and phase outline are fixed: do not
+edit, renumber or delete them; append new D/S entries after them. Expand each phase into items with
+file + symbol, Done Criteria and Predicted Files, and add the impact rows and edge scenarios. If a
+seeded entry looks wrong, keep it and raise it under Open questions with the evidence (file:line)."
+Skip the seed only for trivial, single-phase work.
+
 Run the planner. Find the plan file in FILES_CHANGED_DURING_RUN.
 
 Validate the plan against the repo: right files and layers, follows existing patterns, covers every
 acceptance criterion, testable, no scope creep, open questions resolvable, and every phase has Done
 Criteria (commands), Predicted Files and fixture-enumerated scenarios. Then the checks that caught
 real plan defects:
+- **The seed is intact.** Compare the plan's Ledger, scenarios and outline with `seed.md`: an edited
+  or dropped seeded entry is a defect, whatever the reason.
 - **Re-derive the numbers.** Re-implement any non-trivial rule in a throwaway script and compare EVERY
   fixture value and expected result. Plans have shipped circular definitions (a threshold measured
   against a baseline that depended on the thing being detected) and wrong arithmetic.
@@ -226,7 +248,8 @@ Do not merge.
 - Status hygiene: the plan's `> Status:` header reads CLOSED (or names what is open), its Progress table
   is complete, and any "state of the build" section in `AGENTS.md`/`CLAUDE.md` that the feature made
   false is listed for the user to update (you may not edit those files yourself).
-- Append the SUMMARY entry to `.work/friction.md`.
+- Append the SUMMARY entry to `.work/friction.md`. Run `{{STATS}} --since "<the unit's start>"` and paste its
+  lines under the SUMMARY: what the unit cost and how much code it produced.
 - Report to the user in a few lines: what the software now does, PR link, rounds used, owner checks
   outstanding, anything left open.
 
@@ -321,7 +344,7 @@ At the end of each feature (shipped or stopped), add:
 
 ```
 ### <YYYY-MM-DD> · <slug> · SUMMARY
-- Plan revisions: <n> · Fix rounds: <n> · Verify green on first try: <yes/no> · Review found blocker/major behind green: <yes/no> · Agent time: <n> min · Model requests: <n> · Outcome: <PR link / stopped: reason>
+- Seeded: <yes/no> · Plan revisions: <n> · Fix rounds: <n> · Verify green on first try: <yes/no> · Review found blocker/major behind green: <yes/no> · Agent time: <n> min · Model requests: <n> · Outcome: <PR link / stopped: reason>
 ```
 
 Record facts only. No suggested fixes, no opinions about the agents' instructions — `/retro` turns the

@@ -67,12 +67,14 @@ foreach ($pair in @(@('LONG_CMD_TIMEOUT', '300'), @('TEST_TIMEOUT', '900'), @('M
 $wrapper = Cfg 'COPILOT_WRAPPER'
 if ($Platform -eq 'windows') {
   $C['RUNNER'] = 'pwsh -NoProfile -File .claude/scripts/windows/run-agent.ps1'
+  $C['STATS'] = 'pipeline-stats (macOS/Linux only for now: run it from Git Bash)'
   $C['TIMEOUT_WRAPPER'] = 'pwsh -NoProfile -File .claude/scripts/windows/with-timeout.ps1'
   $C['GATEWAY'] = '.github/copilot/scripts/windows/gateway.ps1'
   if ($wrapper -eq 'with-opencode.sh') { $wrapper = 'with-opencode.ps1' }
   if ($wrapper -notin '', 'with-opencode.ps1') { Die 'COPILOT_WRAPPER must be empty or with-opencode.ps1' }
 } else {
   $C['RUNNER'] = 'bash .claude/scripts/macos/run-agent.sh'
+  $C['STATS'] = 'bash .claude/scripts/macos/pipeline-stats.sh'
   $C['TIMEOUT_WRAPPER'] = 'bash .claude/scripts/macos/with-timeout.sh'
   $C['GATEWAY'] = '.github/copilot/scripts/macos/gateway.sh'
   if ($wrapper -eq 'with-opencode.ps1') { $wrapper = 'with-opencode.sh' }

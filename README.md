@@ -61,6 +61,7 @@ resolves from one config file. macOS/Linux and Windows are both supported.
 | `template/AGENTS.pipeline.md` | Project-facts block written into `AGENTS.md` (read by Claude Code; Copilot agent runs get the same facts from their agent files and the injected rules) |
 | `template/docs/` | Skeletons for the conventions doc and architecture index (created only if absent) |
 | `docs/agents.md` | Agent roster, configuration-key reference, shared conventions |
+| `template/claude/scripts/macos/pipeline-stats.sh` | What a window of agent runs cost and produced: tokens per changed line, where tokens went, time to first edit, re-reads, long runs, stops (used by `/feature` wrap-up and `/retro`) |
 | `tests/macos/regression.sh` | Installs the bundle into a throwaway repo and checks every gateway and runner guard (28 checks); run it after changing scripts or the installer |
 | `RECOMMENDATIONS.md` | Why the pipeline works the way it does, and improvements worth considering |
 

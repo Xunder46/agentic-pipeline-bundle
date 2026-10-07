@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.6.0 — 2026-10-07
+
+- **The governor seeds each plan** (`/feature` step 2): it writes the Goal, Decision Ledger, core
+  scenarios (fixture, expected outcome, why it fails without the change), phase outline and code
+  pointers, about 100–150 lines, before the Copilot planner expands the rest. Every plan revision
+  measured so far traced to a decision or a scenario the governor then had to find by reading code;
+  the seed puts that work first. The planner keeps seeded entries as written (agent-rules.md), the
+  governor checks them against `.work/<slug>/seed.md`, and the friction SUMMARY records "Seeded".
+- **`pipeline-stats.sh`** (macOS/Linux): what a window of runs cost and produced. `/feature` pastes it
+  into each unit's SUMMARY; `/retro` starts from it. `STATS_PATHS` in `pipeline.env` sets which code
+  counts as produced.
+
 ## 1.5.0 — 2026-10-07
 
 - **Reasoning effort is a setting** (`COPILOT_REASONING_EFFORT`, default `max`; empty = the model's

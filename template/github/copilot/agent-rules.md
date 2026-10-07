@@ -68,6 +68,9 @@ time, once each.
 
 ## Planners (conductor, conductor-v2)
 
+A seeded plan (the brief says so) already holds the governor's Decision Ledger, core scenarios and phase
+outline: keep every seeded entry exactly as written, append new D/S entries after them, and expand the
+phases. If a seeded entry looks wrong, keep it and raise it under Open questions with file:line evidence.
 Write only at the paths your brief gives. Every phase item names its file and the symbol (function,
 class or test) it changes, so implementers can start editing without research. No phase has more than
 8 items: split a bigger one into part A and part B (each is one agent run). Do not measure or

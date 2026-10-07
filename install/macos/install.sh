@@ -66,11 +66,13 @@ done
 # Platform-specific commands.
 if [[ $PLATFORM == macos ]]; then
   RUNNER="bash .claude/scripts/macos/run-agent.sh"
+  STATS="bash .claude/scripts/macos/pipeline-stats.sh"
   TIMEOUT_WRAPPER="bash .claude/scripts/macos/with-timeout.sh"
   GATEWAY=".github/copilot/scripts/macos/gateway.sh"
   case "$COPILOT_WRAPPER" in ""|with-opencode.sh) ;; with-opencode.ps1) COPILOT_WRAPPER=with-opencode.sh ;; *) die "COPILOT_WRAPPER must be empty or with-opencode.sh" ;; esac
 else
   RUNNER="pwsh -NoProfile -File .claude/scripts/windows/run-agent.ps1"
+  STATS="pipeline-stats (macOS/Linux only for now: run it from Git Bash)"
   TIMEOUT_WRAPPER="pwsh -NoProfile -File .claude/scripts/windows/with-timeout.ps1"
   GATEWAY=".github/copilot/scripts/windows/gateway.ps1"
   case "$COPILOT_WRAPPER" in ""|with-opencode.ps1) ;; with-opencode.sh) COPILOT_WRAPPER=with-opencode.ps1 ;; *) die "COPILOT_WRAPPER must be empty or with-opencode.ps1" ;; esac

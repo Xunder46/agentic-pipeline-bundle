@@ -111,5 +111,10 @@ COPILOT_REASONING_EFFORT=bogus bash $R start developer .work/t/brief.md > /dev/n
 COPILOT_REASONING_EFFORT= COPILOT_BIN="$PWD/stub.sh" COPILOT_WRAPPER= bash $R start developer .work/t/brief.md > /dev/null 2>&1
 o=.work/runs/$(cat .work/runs/latest.txt)/output.log
 ok "empty reasoning effort passes no flag" "$(grep -c '^ARG --reasoning-effort$' "$o")" "0"
+echo "stats"
+st_out="$(bash .claude/scripts/macos/pipeline-stats.sh --since "$(date -v-1H '+%Y-%m-%d %H:%M' 2>/dev/null || date -d '-1 hour' '+%Y-%m-%d %H:%M')" --until "$(date -v+1H '+%Y-%m-%d %H:%M' 2>/dev/null || date -d '+1 hour' '+%Y-%m-%d %H:%M')" 2>&1)"
+ok "pipeline-stats reports the window's runs" "$(echo "$st_out" | grep -c '^Runs: ')" "1"
+ok "pipeline-stats has no unresolved placeholder" "$(grep -c '{{' .claude/scripts/macos/pipeline-stats.sh)" "0"
+ok "the /feature wrap-up names the stats command" "$(grep -c 'pipeline-stats.sh --since' .claude/commands/feature.md)" "1"
 echo "passed $pass, failed $fail"
 [[ $fail -eq 0 ]]
