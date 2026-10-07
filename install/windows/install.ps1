@@ -236,7 +236,8 @@ try {
 ## Known long-running or hanging commands
 
 <!-- Yours to edit; the installer never rewrites this section. List commands that run long or have
-     hung, the timeout to use, and the known cause. For Copilot agents, add such commands as gateway
+     hung, the timeout to use, and the known cause. The runner adds this section to every Copilot
+     agent prompt. For Copilot agents, also add such commands as gateway
      checks (GATEWAY_EXTRA in pipeline.config) with a timeout. -->
 "@
       Say "added the 'Known long-running or hanging commands' section to AGENTS.md (yours to edit)"

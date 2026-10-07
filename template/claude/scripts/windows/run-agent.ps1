@@ -63,6 +63,7 @@ $StallMinutes = [int](Get-Setting 'STALL_MINUTES' '30')
 $RepeatStop = [int](Get-Setting 'REPEAT_STOP' '40')
 $NoWriteStop = [int](Get-Setting 'NO_WRITE_STOP' '20')   # stop an implementer that has changed no file after this long; 0 = off
 $LongRunMinutes = [int](Get-Setting 'LONG_RUN_MINUTES' '30')   # warn when an implementer run passes this long; 0 = off
+$NoCustomInstructions = (Get-Setting 'COPILOT_NO_CUSTOM_INSTRUCTIONS' '1') -eq '1'   # agents do not auto-load AGENTS.md / CLAUDE.md
 $HungChildMinutes = [int](Get-Setting 'HUNG_CHILD_MINUTES' '10')
 # The macOS wrapper name maps to its Windows counterpart.
 if ($CopilotWrapper -eq 'with-opencode.sh') { $CopilotWrapper = 'with-opencode.ps1' }
@@ -123,6 +124,23 @@ function Get-AgentRules([string]$agent) {
   return ($out -join "`n")
 }
 
+# The "Known long-running or hanging commands" section of AGENTS.md, without its HTML comment.
+# Injected into the prompt because agents run with --no-custom-instructions.
+function Get-KnownHangs {
+  $file = Join-Path $RepoRoot 'AGENTS.md'
+  if (-not (Test-Path $file)) { return '' }
+  $out = @(); $on = $false; $comment = $false
+  foreach ($l in (Get-Content -Path $file -Encoding UTF8)) {
+    if ($l.StartsWith('## Known long-running or hanging commands')) { $on = $true; continue }
+    if (-not $on) { continue }
+    if ($l.StartsWith('## ')) { break }
+    if ($l -match '<!--') { $comment = $true }
+    if ($comment) { if ($l -match '-->') { $comment = $false }; continue }
+    if ($l.Trim()) { $out += $l }
+  }
+  return ($out -join "`n")
+}
+
 function Get-RoleModel([string]$agent) {
   switch ($agent) {
     { $_ -in 'conductor', 'conductor-v2' } { return (Get-Setting 'PLANNER_MODEL' '') }
@@ -169,7 +187,10 @@ function Invoke-Worker([string]$dir) {
   $rules = Get-AgentRules $agent
   if ($rules) { $prompt += "`n`nStanding rules for every run (a brief may add to them, never relax them):`n`n" + $rules }
   $flags = Get-Permissions $agent
+  $hangs = Get-KnownHangs
+  if ($hangs) { $prompt += "`n`nKnown long-running or hanging commands in this repository:`n`n" + $hangs }
   $copilotArgs = @('-p', $prompt, '--agent', $agent, '--no-ask-user') + $flags
+  if ($NoCustomInstructions) { $copilotArgs += '--no-custom-instructions' }
   if ($model) { $copilotArgs += @('--model', $model) }
   $env:OPENCODE_SESSION = 'copilot-' + (Split-Path -Leaf $dir)
   $env:OPENCODE_PROXY_LOG = Join-Path $dir 'proxy.log'

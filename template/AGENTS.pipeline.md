@@ -1,7 +1,10 @@
 ## Development pipeline
 
 This repository is built by a planned, multi-agent pipeline. **Claude Code** reads this file through
-`CLAUDE.md` (`@AGENTS.md`), and **GitHub Copilot CLI** reads it directly, so the facts below bind both.
+`CLAUDE.md` (`@AGENTS.md`). **Copilot agents run by the pipeline do not load it** (the runner passes
+`--no-custom-instructions` to keep every request small): they get the same facts from their agent file
+and `.github/copilot/agent-rules.md`, and the runner adds the "Known long-running or hanging commands"
+section below to their prompt. Keep the two in step when a fact changes.
 Agents come in two editions: `.claude/agents/<name>.md` for Claude Code subagents, and
 `.github/agents/<name>.agent.md` for GitHub Copilot CLI (which prefers them over the `.claude/` files).
 

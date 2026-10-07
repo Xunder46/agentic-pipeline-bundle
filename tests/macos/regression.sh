@@ -92,11 +92,17 @@ ok "a healthy implementer keeps running" "$(st healthy | sed -n 's/^STATUS: //p'
 ok "a reviewer is exempt from no_write" "$(st rev | sed -n 's/^STATUS: //p')" "RUNNING"
 for r in long healthy rev; do kill "$(cat .work/runs/$r/pid)" 2> /dev/null; done
 # Rules injection through the real worker, with a stand-in for copilot that records its prompt.
-printf '#!/bin/bash\nwhile [[ $# -gt 0 ]]; do [[ $1 == -p ]] && { printf "%%s\\n" "$2"; shift; }; shift; done\n' > stub.sh; chmod +x stub.sh
+printf '#!/bin/bash\nwhile [[ $# -gt 0 ]]; do if [[ $1 == -p ]]; then printf "%%s\\n" "$2"; shift; else printf "ARG %%s\\n" "$1"; fi; shift; done\n' > stub.sh; chmod +x stub.sh
+printf '\n- `./slow.sh` hangs for 30 s: never run it twice.\n' >> AGENTS.md
 mkdir -p .work/t; echo "Do X." > .work/t/brief.md
 COPILOT_BIN="$PWD/stub.sh" COPILOT_WRAPPER= bash $R start developer .work/t/brief.md > /dev/null 2>&1
 o=.work/runs/$(cat .work/runs/latest.txt)/output.log
 ok "rules injected for an implementer" "$(grep -c '^## Implementers' "$o")" "1"
 ok "no unresolved placeholder in the prompt" "$(grep -c '{{' "$o")" "0"
+ok "agents run with --no-custom-instructions" "$(grep -c '^ARG --no-custom-instructions$' "$o")" "1"
+ok "AGENTS.md known hangs injected into the prompt" "$(grep -c 'slow.sh. hangs for 30 s' "$o")" "1"
+COPILOT_NO_CUSTOM_INSTRUCTIONS=0 COPILOT_BIN="$PWD/stub.sh" COPILOT_WRAPPER= bash $R start developer .work/t/brief.md > /dev/null 2>&1
+o=.work/runs/$(cat .work/runs/latest.txt)/output.log
+ok "COPILOT_NO_CUSTOM_INSTRUCTIONS=0 turns it off" "$(grep -c '^ARG --no-custom-instructions$' "$o")" "0"
 echo "passed $pass, failed $fail"
 [[ $fail -eq 0 ]]

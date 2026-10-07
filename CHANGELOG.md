@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.4.0 — 2026-10-07
+
+- **Agents run with `--no-custom-instructions`** (setting `COPILOT_NO_CUSTOM_INSTRUCTIONS`, default 1).
+  Copilot otherwise loads `AGENTS.md` (and related files such as `CLAUDE.md`) into every model request,
+  although agents already get their rules from `agent-rules.md` and project facts from their agent
+  file. The one section only `AGENTS.md` holds, "Known long-running or hanging commands", is injected
+  into the prompt by the runner. Expected saving: the size of those files on every request (a few
+  percent of each request). Set 0 to restore the old behaviour.
+- Regression suite: 31 checks (option passed, hang notes injected, setting off).
+
 ## 1.3.1 — 2026-10-07
 
 - `tests/macos/regression.sh`: one command that installs the bundle into a throwaway repo and checks

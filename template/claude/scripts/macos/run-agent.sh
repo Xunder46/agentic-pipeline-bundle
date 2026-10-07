@@ -17,7 +17,7 @@
 # Written for the bash 3.2 that ships with macOS; needs git, perl and pgrep, nothing from Homebrew.
 set -euo pipefail
 
-CONFIG_KEYS="WAIT_MINUTES TAIL_LINES POLL_SECONDS COPILOT_BIN COPILOT_WRAPPER MAX_RUN_MINUTES STALL_MINUTES REPEAT_STOP NO_WRITE_STOP LONG_RUN_MINUTES HUNG_CHILD_MINUTES PLANNER_MODEL DEVELOPER_MODEL REVIEWER_MODEL"
+CONFIG_KEYS="WAIT_MINUTES TAIL_LINES POLL_SECONDS COPILOT_BIN COPILOT_WRAPPER MAX_RUN_MINUTES STALL_MINUTES REPEAT_STOP NO_WRITE_STOP LONG_RUN_MINUTES COPILOT_NO_CUSTOM_INSTRUCTIONS HUNG_CHILD_MINUTES PLANNER_MODEL DEVELOPER_MODEL REVIEWER_MODEL"
 
 ORIG_PWD="$PWD"
 SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
@@ -52,6 +52,7 @@ load_config() {
   : "${REPEAT_STOP:=40}"          # stop when one agent action repeats this often; 0 = off
   : "${NO_WRITE_STOP:=20}"        # stop an implementer that has changed no file after this long; 0 = off
   : "${LONG_RUN_MINUTES:=30}"     # warn when an implementer run passes this long (one concern per run); 0 = off
+  : "${COPILOT_NO_CUSTOM_INSTRUCTIONS:=1}"  # 1 = agents do not auto-load AGENTS.md / CLAUDE.md (see worker)
   : "${HUNG_CHILD_MINUTES:=10}"   # report a child process idle (≈0% CPU) this long
   : "${PLANNER_MODEL=}" "${DEVELOPER_MODEL=}" "${REVIEWER_MODEL=}"   # empty = provider default
 }
@@ -104,6 +105,16 @@ agent_rules() {
                for (i = 1; i <= n; i++) if (w[i] == a) inc = 1 }
              if (inc) print; next }
     inc { print }' "$file"
+}
+
+# The "Known long-running or hanging commands" section of AGENTS.md (project knowledge an agent needs
+# that no agent file or rule carries), without its HTML comment. Injected into the prompt because
+# agents run with --no-custom-instructions.
+known_hangs() {
+  local file="$REPO_ROOT/AGENTS.md"
+  [[ -f $file ]] || return 0
+  awk '/^## Known long-running or hanging commands/ { on = 1; next } on && /^## / { exit }
+       on && /<!--/ { c = 1 } on && c { if (/-->/) c = 0; next } on { print }' "$file" | sed '/^[[:space:]]*$/d'
 }
 
 # The model for an agent's role, from .claude/pipeline.env (empty = provider default).
@@ -169,7 +180,19 @@ Standing rules for every run (a brief may add to them, never relax them):
 ${rules}"
   fi
   load_permissions "$agent"
+  # Agents get their rules from the prompt (agent-rules.md) and project facts from their agent file,
+  # so Copilot's automatic loading of AGENTS.md / CLAUDE.md into every request only adds tokens.
+  local hangs
+  hangs="$(known_hangs)"
+  if [[ -n $hangs ]]; then
+    prompt="${prompt}
+
+Known long-running or hanging commands in this repository:
+
+${hangs}"
+  fi
   local args=(-p "$prompt" --agent "$agent" --no-ask-user "${PERM_FLAGS[@]}")
+  if [[ $COPILOT_NO_CUSTOM_INSTRUCTIONS == 1 ]]; then args+=(--no-custom-instructions); fi
   if [[ -n $model ]]; then args+=(--model "$model"); fi
   export OPENCODE_SESSION="copilot-$(basename "$dir")"   # one stable session per run
   export OPENCODE_PROXY_LOG="$dir/proxy.log"              # kept with the run (with-opencode.sh)

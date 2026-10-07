@@ -58,7 +58,7 @@ resolves from one config file. macOS/Linux and Windows are both supported.
 | `template/github/copilot/pr-scope-budget.md` | The PR scope budget: when a plan is too big, and how to split it |
 | `template/github/copilot/agent-rules.md` | The standing rules for every agent run, by role; the runner appends them to each prompt, so briefs never carry copies |
 | `template/github/copilot/scripts/macos/`, `windows/` | The gateway, per OS |
-| `template/AGENTS.pipeline.md` | Project-facts block written into `AGENTS.md` (read by both tools) |
+| `template/AGENTS.pipeline.md` | Project-facts block written into `AGENTS.md` (read by Claude Code; Copilot agent runs get the same facts from their agent files and the injected rules) |
 | `template/docs/` | Skeletons for the conventions doc and architecture index (created only if absent) |
 | `docs/agents.md` | Agent roster, configuration-key reference, shared conventions |
 | `tests/macos/regression.sh` | Installs the bundle into a throwaway repo and checks every gateway and runner guard (28 checks); run it after changing scripts or the installer |
@@ -131,7 +131,7 @@ Then open a new terminal **and restart Claude Code**. `copilot help environment`
 | `.claude/settings.json` | Claude Code permissions and Bash timeouts | Allows the runner and timeout wrapper; denies force-push, pushing the base branch, merging, and calling `copilot` directly |
 | `.github/copilot/permissions/*.flags` | Copilot permissions per agent | See §4 |
 | `.github/copilot/gateway.conf` | The gateway's checks: `name \| timeout \| command [\| requires-args]` | Generated from `LINT_CMD`, `TYPECHECK_CMD`, `TEST_CMD`, `BUILD_CMD` and `GATEWAY_EXTRA` |
-| `AGENTS.md` | The managed pipeline block (don't edit inside the markers), plus your own sections | Copilot reads it; `CLAUDE.md` imports it with `@AGENTS.md` |
+| `AGENTS.md` | The managed pipeline block (don't edit inside the markers), plus your own sections | `CLAUDE.md` imports it with `@AGENTS.md`; Copilot agent runs skip it (`COPILOT_NO_CUSTOM_INSTRUCTIONS`) and receive only its "Known long-running or hanging commands" section in the prompt |
 
 ---
 
