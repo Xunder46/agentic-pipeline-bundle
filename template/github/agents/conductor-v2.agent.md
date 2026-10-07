@@ -229,8 +229,8 @@ Conductor marks each RATIFIED (promote to D-x) or REVERT (remediation).>
 ### Phase design
 
 - One handoff, one owning agent, one verifiable change surface per phase.
-- One phase is one agent run of about ten steps. Split a bigger phase into part
-  A and part B: long runs cost the most and fail the most.
+- One phase is one agent run of at most 8 items. Split a bigger phase into
+  part A and part B: long runs cost the most and fail the most.
 - State the dependency graph explicitly and offer re-orderings with their
   trade-offs ("Phase 4 only needs 3.3; running it first gives the visible win at
   the cost of X").
