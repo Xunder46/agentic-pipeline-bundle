@@ -139,6 +139,8 @@ real plan defects:
   is registered is not the order it is shown in.
 - **Each mutation check names the seed or stub that turns it red**; one the real fixture cannot tell
   apart proves nothing.
+- **No phase over 8 items.** A bigger phase becomes part A and part B, one run each (a two-phase brief
+  ran 61 minutes; an 11-step phase was sent back).
 - **A new entry in a shared registry lists the existing tests it could also satisfy** (they go red
   when two results appear where one was expected).
 
@@ -162,14 +164,18 @@ carry out the "Governor actions" the agent listed (deletions, directories) when 
 plan's scope; log the rest as friction.
 
 **One phase per run** (split a large phase into part A and part B): each phase then gets its own
-verify and commit checkpoint, a failure costs one phase, and the run stays short (see Cost). Give
-several phases to one run only when each is a few steps.
+verify and commit checkpoint, a failure costs one phase, and the run stays short (see Cost). Never brief
+two phases into one run: a two-phase brief ran 61 minutes, as much as five short runs. Each brief
+also names the base commit (the commit before this unit), which agents pass to `prove-red`.
 
 ### 4. Verify (you)
 Run the verify commands yourself, each through the timeout wrapper; do not trust the agent's claim. Also
 run the invariant checks. Read the code of the one or two files where the plan's core invariant lives.
 Check `git diff --stat`: an existing file with a far bigger diff than its edit is formatter damage. Look
 for mutation residue (read the lines the evidence says were mutated) and for stray scratch files.
+Read the `prove-red` verdicts in the evidence: every new or changed guard must be RED AT the base (or,
+where it cannot compile there, proven by a mutation). A GREEN AT verdict, or none, is a failed verify:
+that is how a test that passed on the old code reached review three times on one PR.
 
 On failure, write `brief-fix-<N>.md` with the **full, untrimmed failure output**, the plan path, and the
 **goal and the acceptance test**, not a prescribed mechanism: name the defect and what must be true
@@ -258,6 +264,7 @@ The runner prints a HEALTH block so you do not have to gather it by hand:
 - `DENIED` / `TOP_TEXT_REPEAT` — permission denials, and the most repeated line of prose
 - `TOP_READ` — the file read most often across line ranges (re-reading is the main cost of a run)
 - `FIRST_WRITE` — an implementer that has changed no file yet, and for how long
+- `LONG_RUN` — an implementer past `LONG_RUN_MINUTES` (30): not stopped; split the rest into its own run
 - `MODEL_REQUESTS` / `TOKENS` — requests so far (with the proxy), and Copilot's token totals at the end
 - `HUNG_CHILD` — a child process running ≥ 10 min at ~0% CPU (pid, elapsed, command)
 - `HIGH_LOAD` — the machine is saturated; timings are unreliable

@@ -8,6 +8,9 @@
 #   .github/copilot/scripts/macos/gateway.sh git-log [<count>] [<ref>]
 #   .github/copilot/scripts/macos/gateway.sh git-show <ref> [--stat|--name-only|--name-status]
 #   .github/copilot/scripts/macos/gateway.sh delete-scratch <path>   removes an untracked probe file
+#   .github/copilot/scripts/macos/gateway.sh prove-red <ref> <check> [args...] [-- <files...>]
+#       runs <check> on a temporary checkout of <ref> with your versions of <files> (default: the args
+#       that are files) carried over: a new or changed test proves something only if it FAILS there
 #
 # Output: a check that prints more than SUMMARY_OVER lines or SUMMARY_BYTES bytes is saved whole under .work/gateway/ and
 # shown as a summary (first lines, every line that looks like a failure, the last lines, and the
@@ -21,9 +24,15 @@
 # repository. Exit status: the check's own; 124 on timeout; 2 for a refused request.
 set -euo pipefail
 
+SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"   # absolute: prove-red re-runs it from elsewhere
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "gateway: not inside a git repository" >&2; exit 2; }
 cd "$ROOT"
 CONF="$ROOT/.github/copilot/gateway.conf"
+LOG_DIR="$ROOT/.work/gateway"
+MAIN_ROOT="$ROOT"
+# prove-red re-runs this script inside a temporary checkout; it keeps the main checkout's checks and
+# log folder. (An agent cannot set these: its shell permission only matches the gateway's own path.)
+if [[ ${GATEWAY_INNER:-} == 1 ]]; then CONF="$GATEWAY_CONF"; LOG_DIR="$GATEWAY_LOG_DIR"; MAIN_ROOT="$GATEWAY_MAIN_ROOT"; fi
 SUMMARY_OVER=200
 SUMMARY_BYTES=16000   # long lines matter too: 196 lint notices are only ~200 lines but 37 KB
 # Untracked files whose path starts with this may be removed with delete-scratch (set by the installer).
@@ -74,6 +83,7 @@ list_checks() {
   conf_entries | awk -F'|' '{ gsub(/^ +| +$/, "", $1); gsub(/^ +| +$/, "", $2); gsub(/^ +| +$/, "", $3); gsub(/^ +| +$/, "", $4)
     printf "  %-14s %5ss  %s%s\n", $1, $2, $3, ($4 == "" ? "" : "  [" $4 "]") }'
   echo "Git views: git-status · git-diff [<ref>] [--stat|--name-only|--name-status|--cached] [-- <path>...] · git-log [<count>] [<ref>] · git-show <ref> [--stat|--name-only|--name-status]"
+  echo "Proof: prove-red <ref> <check> [args...] [-- <files...>] runs a check on <ref> (e.g. HEAD) with your test files carried over; a guard must FAIL there"
   echo "Cleanup: delete-scratch ${SCRATCH_PREFIX}<name> (an untracked probe file you created)"
   echo "Output over $SUMMARY_OVER lines or $((SUMMARY_BYTES / 1000)) KB is summarised; the full log path is printed (read it with your file tool)."
 }
@@ -134,7 +144,7 @@ delete_scratch() {
 # when it is short; otherwise as a summary that points at the log.
 run_summarized() {
   local name="$1" secs="$2"; shift 2
-  local dir="$ROOT/.work/gateway" log
+  local dir="$LOG_DIR" log
   mkdir -p "$dir"
   find "$dir" -name '*.log' -mtime +0 -delete 2> /dev/null || true
   log="$dir/$name-$(date +%Y%m%d-%H%M%S)-$$.log"
@@ -166,7 +176,7 @@ run_summarized() {
     }
     if ($timed_out) { print STDERR "gateway: TIMEOUT after ${secs}s: @ARGV\n"; exit 124 }
     exit(($st & 127) ? 128 + ($st & 127) : ($st >> 8));
-  ' "$secs" "$log" "${log#"$ROOT"/}" "$SUMMARY_OVER" "$SUMMARY_BYTES" "$@"
+  ' "$secs" "$log" "${log#"$MAIN_ROOT"/}" "$SUMMARY_OVER" "$SUMMARY_BYTES" "$@"
 }
 
 run_check() {
@@ -207,6 +217,47 @@ run_check() {
   exit "$code"
 }
 
+# Shows that new or changed tests detect the change: runs <check> on a temporary checkout of <ref>
+# (typically HEAD, or the base commit the brief names) with the agent's versions of the test files
+# carried over. Green there means the tests pass without the change, so they prove nothing.
+prove_red() {
+  [[ $# -ge 2 ]] || refuse "usage: prove-red <ref> <check> [args...] [-- <files to carry over...>]"
+  local ref="$1" name="$2"; shift 2
+  check_ref "$ref"
+  case "$name" in prove-red|delete-scratch|list|base-setup|git-*) refuse "prove-red runs a check from gateway.conf, not '$name'" ;; esac
+  conf_entries | awk -F'|' -v n="$name" '{ k = $1; gsub(/^ +| +$/, "", k); if (k == n) f = 1 } END { exit !f }' \
+    || refuse "unknown check '$name'"
+  local args=() carry=() split=0 a
+  for a in "$@"; do
+    if [[ $split -eq 1 ]]; then carry+=("$a"); continue; fi
+    if [[ $a == -- ]]; then split=1; continue; fi
+    args+=("$a")
+  done
+  if [[ $split -eq 0 ]]; then for a in ${args[@]+"${args[@]}"}; do [[ -f $a ]] && carry+=("$a"); done; fi
+  [[ ${#carry[@]} -gt 0 ]] || refuse "name the test files to carry over (after '--', or as file arguments)"
+  for a in ${args[@]+"${args[@]}"}; do check_arg "$a"; done
+  for a in "${carry[@]}"; do check_arg "$a"; [[ -f $a && ! -L $a ]] || refuse "not a file: $a"; done
+
+  local wt="$LOG_DIR/base-$$" code=0
+  mkdir -p "$LOG_DIR"
+  git worktree add --detach -q "$wt" "$ref" > /dev/null 2>&1 || refuse "could not check out $ref"
+  trap 'git -C "$MAIN_ROOT" worktree remove --force "$wt" > /dev/null 2>&1 || rm -rf "$wt"; git -C "$MAIN_ROOT" worktree prune > /dev/null 2>&1 || true' EXIT
+  for a in "${carry[@]}"; do mkdir -p "$wt/$(dirname "$a")"; cp -p "$a" "$wt/$a"; done
+  local inner=(env GATEWAY_INNER=1 GATEWAY_CONF="$CONF" GATEWAY_LOG_DIR="$LOG_DIR" GATEWAY_MAIN_ROOT="$MAIN_ROOT" bash "$SELF")
+  echo "gateway: prove-red: '$name' on $ref with your versions of: ${carry[*]}" >&2
+  if conf_entries | awk -F'|' '{ k = $1; gsub(/^ +| +$/, "", k); if (k == "base-setup") f = 1 } END { exit !f }'; then
+    (cd "$wt" && "${inner[@]}" base-setup) > /dev/null 2>&1 || { echo "gateway: prove-red: base-setup failed on $ref" >&2; exit 2; }
+  fi
+  (cd "$wt" && "${inner[@]}" "$name" ${args[@]+"${args[@]}"}) || code=$?
+  if [[ $code -eq 124 ]]; then echo "gateway: prove-red: TIMEOUT on $ref" >&2; exit 124; fi
+  if [[ $code -eq 0 ]]; then
+    echo "gateway: prove-red: GREEN AT $ref: these tests pass without your change, so they do not detect it. Strengthen them." >&2
+    exit 1
+  fi
+  echo "gateway: prove-red: RED AT $ref (exit $code). It proves the guard only if an assertion fails for the reason the test guards; a compile or load error means the test could not run there (use a mutation instead)." >&2
+  exit 0
+}
+
 # Tracked files missing from the working tree, one per line.
 deleted_tracked() { git -c core.quotepath=off ls-files --deleted 2>/dev/null | sort || true; }
 
@@ -234,5 +285,6 @@ case "$action" in
   git-log) git_log "$@" ;;
   git-show) git_show "$@" ;;
   delete-scratch) delete_scratch "$@" ;;
+  prove-red) prove_red "$@" ;;
   *) run_check "$action" "$@" ;;
 esac

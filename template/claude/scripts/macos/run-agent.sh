@@ -17,7 +17,7 @@
 # Written for the bash 3.2 that ships with macOS; needs git, perl and pgrep, nothing from Homebrew.
 set -euo pipefail
 
-CONFIG_KEYS="WAIT_MINUTES TAIL_LINES POLL_SECONDS COPILOT_BIN COPILOT_WRAPPER MAX_RUN_MINUTES STALL_MINUTES REPEAT_STOP NO_WRITE_STOP HUNG_CHILD_MINUTES PLANNER_MODEL DEVELOPER_MODEL REVIEWER_MODEL"
+CONFIG_KEYS="WAIT_MINUTES TAIL_LINES POLL_SECONDS COPILOT_BIN COPILOT_WRAPPER MAX_RUN_MINUTES STALL_MINUTES REPEAT_STOP NO_WRITE_STOP LONG_RUN_MINUTES HUNG_CHILD_MINUTES PLANNER_MODEL DEVELOPER_MODEL REVIEWER_MODEL"
 
 ORIG_PWD="$PWD"
 SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
@@ -51,6 +51,7 @@ load_config() {
   : "${STALL_MINUTES:=30}"        # stop when log AND diff are both idle this long; 0 = off
   : "${REPEAT_STOP:=40}"          # stop when one agent action repeats this often; 0 = off
   : "${NO_WRITE_STOP:=20}"        # stop an implementer that has changed no file after this long; 0 = off
+  : "${LONG_RUN_MINUTES:=30}"     # warn when an implementer run passes this long (one concern per run); 0 = off
   : "${HUNG_CHILD_MINUTES:=10}"   # report a child process idle (≈0% CPU) this long
   : "${PLANNER_MODEL=}" "${DEVELOPER_MODEL=}" "${REVIEWER_MODEL=}"   # empty = provider default
 }
@@ -345,6 +346,14 @@ print_health() {
   echo "  TOP_READ: ${topread%% *}× \"${topread#* }\" (one file, any line range)"
   if is_implementer "$(cat "$dir/agent" 2>/dev/null)" && no_write_yet "$dir" && [[ ! -f $dir/exit ]]; then
     echo "  FIRST_WRITE: none yet after $(minutes_since "$(cat "$dir/started_epoch")") min (auto-stop at ${NO_WRITE_STOP:-0}; 0 = off)"
+  fi
+  # Runs over ~30 minutes cost the most (a 60-minute run cost as much as five short ones) and are
+  # where scope piles up: two phases in one brief, or a 1,000-line test file. Not stopped: say so
+  # in the next brief, and split.
+  local elapsed; elapsed="$(minutes_since "$(cat "$dir/started_epoch")")"
+  if [[ ${LONG_RUN_MINUTES:-0} -gt 0 && ! -f $dir/exit ]] && is_implementer "$(cat "$dir/agent" 2>/dev/null)" \
+     && awk -v e="$elapsed" -v l="$LONG_RUN_MINUTES" 'BEGIN { exit !(e >= l) }'; then
+    echo "  LONG_RUN: $elapsed min, past $LONG_RUN_MINUTES; split the remaining work into its own run next time"
   fi
   if [[ -f $dir/proxy.log ]]; then
     requests="$(grep -c ' -> ' "$dir/proxy.log" || true)"

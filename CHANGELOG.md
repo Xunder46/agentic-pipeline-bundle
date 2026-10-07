@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.3.0 — 2026-10-06
+
+Measured on a full day after 1.2: the same output as the previous day for 14% fewer tokens per PR,
+briefs fully compliant, far fewer runs reading without writing. The remaining waste: fix rounds (19%
+of tokens, mostly tests that proved nothing), runs of 55–61 minutes (24%), and repeated test runs.
+
+- **`prove-red`** (gateway): runs the named check on a temporary checkout of a commit (usually HEAD)
+  with the agent's test files carried over. RED AT proves the test detects the change; GREEN AT means
+  it proves nothing (exit 1). An optional `base-setup` check prepares the checkout. Agents must paste
+  the verdicts; the reviewer spot-checks with it; the governor treats a missing or GREEN verdict as a
+  failed verify.
+- **One concern per run:** a `LONG_RUN` warning past `LONG_RUN_MINUTES` (30); briefs never cover two
+  phases; plans keep phases to 8 items; implementers stop at a finished item when unplanned work grows.
+- **Test economy:** while working, run only the touched tests; the full suite once at the end and
+  again only after a fix; another suite only if its sources changed.
+
 ## 1.2.0 — 2026-10-06
 
 From measuring 30 runs after 1.1: reliability improved (no loops, no degenerated runs, every phase

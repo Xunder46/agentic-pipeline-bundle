@@ -9,6 +9,9 @@ The ONLY shell command Copilot agents may run on Windows (allowed by
   .github/copilot/scripts/windows/gateway.ps1 git-log [<count>] [<ref>]
   .github/copilot/scripts/windows/gateway.ps1 git-show <ref> [--stat|--name-only|--name-status]
   .github/copilot/scripts/windows/gateway.ps1 delete-scratch <path>   removes an untracked probe file
+  .github/copilot/scripts/windows/gateway.ps1 prove-red <ref> <check> [args...] [-- <files...>]
+      runs <check> on a temporary checkout of <ref> with your versions of <files> (default: the args
+      that are files) carried over: a new or changed test proves something only if it FAILS there
 
 Runs a fixed menu, with every argument checked to stay inside the repository. Exit status: the
 check's own; 124 on timeout; 2 for a refused request.
@@ -28,6 +31,11 @@ $root = (& git rev-parse --show-toplevel 2>$null)
 if (-not $root) { [Console]::Error.WriteLine('gateway: not inside a git repository'); exit 2 }
 Set-Location $root
 $conf = Join-Path $root '.github/copilot/gateway.conf'
+$LogDir = Join-Path $root '.work/gateway'
+$MainRoot = $root
+# prove-red re-runs this script inside a temporary checkout; it keeps the main checkout's checks and
+# log folder. (An agent cannot set these: its shell permission only matches the gateway's own path.)
+if ($env:GATEWAY_INNER -eq '1') { $conf = $env:GATEWAY_CONF; $LogDir = $env:GATEWAY_LOG_DIR; $MainRoot = $env:GATEWAY_MAIN_ROOT }
 $SummaryOver = 200
 $SummaryBytes = 16000   # long lines matter too: 196 lint notices are only ~200 lines but 37 KB
 # Untracked files whose path starts with this may be removed with delete-scratch (set by the installer).
@@ -69,6 +77,7 @@ function Show-List {
     '  {0,-14} {1,5}s  {2}{3}' -f $e.Name, $e.Timeout, $e.Command, $opt
   }
   'Git views: git-status · git-diff [<ref>] [--stat|--name-only|--name-status|--cached] [-- <path>...] · git-log [<count>] [<ref>] · git-show <ref> [--stat|--name-only|--name-status]'
+  'Proof: prove-red <ref> <check> [args...] [-- <files...>] runs a check on <ref> (e.g. HEAD) with your test files carried over; a guard must FAIL there'
   "Cleanup: delete-scratch ${ScratchPrefix}<name> (an untracked probe file you created)"
   "Output over $SummaryOver lines or $([int]($SummaryBytes / 1000)) KB is summarised; the full log path is printed (read it with your file tool)."
 }
@@ -85,7 +94,7 @@ function Write-CheckOutput([string]$exe, [string]$log) {
   $cut = { param($s) if ($s.Length -gt 300) { $s.Substring(0, 300) + ' ...' } else { $s } }
   $size = ($l | Measure-Object -Property Length -Sum).Sum + $l.Count
   if ($l.Count -le $SummaryOver -and $size -le $SummaryBytes) { $l | ForEach-Object { & $cut $_ }; return }
-  $rel = $log.Substring($root.Length).TrimStart('\', '/') -replace '\\', '/'
+  $rel = $log.Substring($MainRoot.Length).TrimStart('\', '/') -replace '\\', '/'
   $fail = '(?i)\b(error|errors|fail|failed|failure|failing|exception|panic|traceback|assert\w*|expected|actual|timed? ?out)\b|\[E\]|' + [char]0x2717
   $hits = @(0..($l.Count - 1) | Where-Object { $l[$_] -match $fail })
   "gateway: $exe printed $($l.Count) lines; full output: $rel"
@@ -176,7 +185,7 @@ function Invoke-Check([string]$name, [string[]]$extra) {
   if ($e.Options -match 'full-output') {
     Invoke-WithTimeout ([int]$e.Timeout) $parts
   } else {
-    $dir = Join-Path $root '.work/gateway'
+    $dir = $LogDir
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
     Get-ChildItem $dir -Filter '*.log' -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-1) } | Remove-Item -ErrorAction SilentlyContinue
     $log = Join-Path $dir ('{0}-{1}-{2}.log' -f $name, (Get-Date -Format 'yyyyMMdd-HHmmss'), $PID)
@@ -250,6 +259,64 @@ if ($args.Count -eq 0) { Show-List; exit 0 }
 $action = [string]$args[0]
 $rest = @(); if ($args.Count -gt 1) { $rest = @($args[1..($args.Count - 1)] | ForEach-Object { [string]$_ }) }
 
+# Shows that new or changed tests detect the change: runs <check> on a temporary checkout of <ref>
+# (typically HEAD, or the base commit the brief names) with the agent's versions of the test files
+# carried over. Green there means the tests pass without the change, so they prove nothing.
+function Invoke-ProveRed([string[]]$a) {
+  if ($a.Count -lt 2) { Refuse 'usage: prove-red <ref> <check> [args...] [-- <files to carry over...>]' }
+  $ref = $a[0]; $name = $a[1]
+  Test-Ref $ref
+  if ($name -in 'prove-red', 'delete-scratch', 'list', 'base-setup' -or $name -like 'git-*') { Refuse "prove-red runs a check from gateway.conf, not '$name'" }
+  if (-not (Get-Entries | Where-Object { $_.Name -eq $name })) { Refuse "unknown check '$name'" }
+  $checkArgs = @(); $carry = @(); $split = $false
+  foreach ($x in ($a | Select-Object -Skip 2)) {
+    if ($split) { $carry += $x; continue }
+    if ($x -eq '--') { $split = $true; continue }
+    $checkArgs += $x
+  }
+  if (-not $split) { $carry = @($checkArgs | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf }) }
+  if ($carry.Count -eq 0) { Refuse "name the test files to carry over (after '--', or as file arguments)" }
+  foreach ($x in $checkArgs) { Test-Arg $x }
+  foreach ($x in $carry) { Test-Arg $x; if (-not (Test-Path -LiteralPath $x -PathType Leaf)) { Refuse "not a file: $x" } }
+
+  New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
+  $wt = Join-Path $LogDir "base-$PID"
+  & git worktree add --detach -q $wt $ref *> $null
+  if ($LASTEXITCODE -ne 0) { Refuse "could not check out $ref" }
+  $code = 0
+  try {
+    foreach ($x in $carry) {
+      $dest = Join-Path $wt $x
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $dest) | Out-Null
+      Copy-Item -LiteralPath $x -Destination $dest -Force
+    }
+    $env:GATEWAY_INNER = '1'; $env:GATEWAY_CONF = $conf; $env:GATEWAY_LOG_DIR = $LogDir; $env:GATEWAY_MAIN_ROOT = $MainRoot
+    $shell = (Get-Process -Id $PID).Path
+    [Console]::Error.WriteLine("gateway: prove-red: '$name' on $ref with your versions of: $($carry -join ' ')")
+    Push-Location $wt
+    try {
+      if (Get-Entries | Where-Object { $_.Name -eq 'base-setup' }) {
+        & $shell -NoProfile -File $PSCommandPath base-setup *> $null
+        if ($LASTEXITCODE -ne 0) { [Console]::Error.WriteLine("gateway: prove-red: base-setup failed on $ref"); $code = -2 }
+      }
+      if ($code -eq 0) { & $shell -NoProfile -File $PSCommandPath $name @checkArgs; $code = $LASTEXITCODE }
+    } finally { Pop-Location }
+  } finally {
+    Remove-Item Env:GATEWAY_INNER, Env:GATEWAY_CONF, Env:GATEWAY_LOG_DIR, Env:GATEWAY_MAIN_ROOT -ErrorAction SilentlyContinue
+    & git -C $MainRoot worktree remove --force $wt *> $null
+    if (Test-Path $wt) { Remove-Item -Recurse -Force $wt -ErrorAction SilentlyContinue }
+    & git -C $MainRoot worktree prune *> $null
+  }
+  if ($code -eq -2) { exit 2 }
+  if ($code -eq 124) { [Console]::Error.WriteLine("gateway: prove-red: TIMEOUT on $ref"); exit 124 }
+  if ($code -eq 0) {
+    [Console]::Error.WriteLine("gateway: prove-red: GREEN AT ${ref}: these tests pass without your change, so they do not detect it. Strengthen them.")
+    exit 1
+  }
+  [Console]::Error.WriteLine("gateway: prove-red: RED AT $ref (exit $code). It proves the guard only if an assertion fails for the reason the test guards; a compile or load error means the test could not run there (use a mutation instead).")
+  exit 0
+}
+
 switch ($action) {
   { $_ -in 'list', '-h', '--help' } { Show-List; exit 0 }
   'git-status' { if ($rest.Count -gt 0) { Refuse 'git-status takes no arguments' }; & git --no-pager status --short --branch; exit $LASTEXITCODE }
@@ -257,5 +324,6 @@ switch ($action) {
   'git-log' { Invoke-GitLog $rest }
   'git-show' { Invoke-GitShow $rest }
   'delete-scratch' { Remove-Scratch $rest }
+  'prove-red' { Invoke-ProveRed $rest }
   default { Invoke-Check $action $rest }
 }

@@ -37,6 +37,8 @@ The first section shows how this bundle guards against each. The second shows wh
 | 21 | **Standing agent rules in one file the runner injects** (`agent-rules.md`) | A rule change never reaching agents because each brief copies the previous brief's footer |
 | 22 | **No-write stop and `TOP_READ`**: an implementer that has written nothing after 20 minutes is stopped | Runs that read the same plan and files dozens of times and write nothing |
 | 23 | **The gateway reverts deletions made through a check**; the governor makes planned deletions | An agent routing around "no deletions" by writing a test that deletes files |
+| 24 | **`prove-red`**: the gateway runs new tests on a temporary checkout of the code without the change | A test that passes on the old code (it proves nothing) reaching review; one PR went through three review rounds this way |
+| 25 | **`LONG_RUN` warning, 8-item phases, one phase per brief** | 60-minute runs that cost as much as five short ones |
 
 ## 2. Where the tokens go
 
@@ -69,11 +71,12 @@ fast model):
 
 ## 3. Improvements worth considering
 
-1. **Spend your strongest model on planning and review.** Review is the stage that keeps finding
-   real defects behind passing tests, and plan defects are the largest source of re-runs (§2). Set
-   `PLANNER_MODEL` and `REVIEWER_MODEL` to your provider's strongest model and keep
-   `DEVELOPER_MODEL` fast: planners and reviewers make few requests per feature, implementers make
-   most of them. Or, in `/feature` step 5, use the Claude `code-reviewer` subagent instead of the
+1. **Price a stronger model per role before switching.** Planning and review are where a stronger
+   model helps most, and they make few requests (measured: planning 13% and review 11% of tokens).
+   But a model 4× the price on planning alone raises total spend by roughly 40%. Measure first:
+   if plan defects (not weak tests, which `prove-red` now catches) cause most fix rounds, the switch
+   may pay; if the governor's plan validation already catches them cheaply, it does not. Set
+   `PLANNER_MODEL` / `REVIEWER_MODEL` per role and keep `DEVELOPER_MODEL` fast either way. Or, in `/feature` step 5, use the Claude `code-reviewer` subagent instead of the
    Copilot reviewer. Track the effect with the friction SUMMARY's "review found blocker/major behind
    green" and "Plan revisions" fields.
 2. **Retire the OpenCode proxy if your Copilot version allows it.** Copilot CLI supports

@@ -144,7 +144,7 @@ Then open a new terminal **and restart Claude Code**. `copilot help environment`
 | Write allow | Planner: plans + docs. Reviewer: plans. Builders: anywhere in the repo | `<agent>.flags` |
 | Write deny | `.claude/`, `.github/agents/`, `.github/copilot/`, `.github/workflows/` (CI runs with the repo's secrets), `.git/`, `AGENTS.md`, `CLAUDE.md` | `common.flags` |
 | Secrets | Provider and GitHub tokens are stripped from the agent's shell environment | `common.flags` (`--secret-env-vars`) |
-| Gateway | Fixed checks with timeouts; tracked files a check deletes are restored and the check fails; arguments must stay inside the repo (no absolute, `~` or `..` paths); read-only git views with validated refs; `requires-args` stops formatters running on the whole tree and `new-files-only` keeps them off existing files; `delete-scratch` removes only an untracked `TEST_ROOT/zz_*` probe; output over 200 lines or 16 KB is summarised, full log in `.work/gateway/` | `.github/copilot/scripts/<os>/gateway.*` |
+| Gateway | Fixed checks with timeouts; tracked files a check deletes are restored and the check fails; arguments must stay inside the repo (no absolute, `~` or `..` paths); read-only git views with validated refs; `requires-args` stops formatters running on the whole tree and `new-files-only` keeps them off existing files; `delete-scratch` removes only an untracked `TEST_ROOT/zz_*` probe; `prove-red <ref> <check> <tests>` runs new tests against a temporary checkout of the code without the change (optional `base-setup` check prepares it) so a test that proves nothing is caught before review; output over 200 lines or 16 KB is summarised, full log in `.work/gateway/` | `.github/copilot/scripts/<os>/gateway.*` |
 | Runner | Never passes `--allow-all-tools`; refuses an agent with no profile; refuses a profile containing allow-all or a rule that allows an interpreter (`bash`, `pwsh`, `python`, `node`…) | `.claude/scripts/<os>/run-agent.*` |
 
 These rules were verified against Copilot CLI's actual behaviour: unapproved tools are denied
@@ -257,7 +257,7 @@ Artifacts: plans in your plans folder; briefs in `.work/<slug>/`; every run in `
 
 HEALTH reports log and diff idle time, diff size, the most repeated tool call, permission denials,
 the most repeated line of prose, the most re-read file, how long an implementer has gone without
-writing, model request and error counts (with the proxy), Copilot's token
+writing, an implementer run past `LONG_RUN_MINUTES`, model request and error counts (with the proxy), Copilot's token
 totals when a run ends, hung child processes, and a saturated machine. The runner stops a run by
 itself on `MAX_RUN_MINUTES` (`max_runtime`), on `REPEAT_STOP` repeats of one tool call (`loop`) or
 `REPEAT_STOP` denials (`denied`), on one line of prose repeated `max(200, 5 × REPEAT_STOP)` times

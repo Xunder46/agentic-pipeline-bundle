@@ -64,7 +64,8 @@ REVIEWER_MODEL=""
 #     full-output     never summarise the output (by default, output over 200 lines or 16 KB is summarised and
 #                     saved under .work/gateway/, which saves the agent re-reading it in chunks)
 # Drop new-files-only once the repo is format-clean (RECOMMENDATIONS.md §3.4).
-GATEWAY_EXTRA="codegen|300|npm run codegen; format|120|npx prettier --write|requires-args new-files-only"
+# A check named base-setup runs first in the temporary checkout prove-red makes (install dependencies).
+GATEWAY_EXTRA="codegen|300|npm run codegen; format|120|npx prettier --write|requires-args new-files-only; base-setup|300|npm ci"
 
 # ---- Runner (.claude/pipeline.env) ---------------------------------------------------------------
 COPILOT_WRAPPER=""          # "with-opencode.sh" for OpenCode Go/Zen (mapped to .ps1 on Windows); "" otherwise

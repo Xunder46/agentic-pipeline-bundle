@@ -57,8 +57,10 @@ an interpreter.
    Copilot agents can run. Add what your agents need (code generation, a formatter with
    `requires-args new-files-only`) through `GATEWAY_EXTRA`, never as a shell allow rule. Besides the
    checks and git views, the gateway offers `delete-scratch` (an agent removes its own untracked
-   `TEST_ROOT/zz_*` probe file) and summarises output over 200 lines or 16 KB, keeping the full log in
-   `.work/gateway/`.
+   `TEST_ROOT/zz_*` probe file), `prove-red` (runs new tests on a temporary checkout of the code
+   without the change: a test that passes there proves nothing), and summarises output over 200 lines
+   or 16 KB, keeping the full log in `.work/gateway/`. If tests need dependencies installed in a fresh
+   checkout, add a `base-setup` check (for example `base-setup|300|npm ci`).
 4. **Tune the scope budget** in `.github/copilot/pr-scope-budget.md` if your PRs are naturally larger
    or smaller; the `pr-scope-guard` skill applies it at each checkpoint.
 
@@ -124,6 +126,7 @@ agents skip rules about it.
 | `MAX_RUN_MINUTES` | Hard stop per run (0 = off) | `120` |
 | `STALL_MINUTES` | Stop when the log and the diff are both idle this long (0 = off) | `30` |
 | `NO_WRITE_STOP` | In `.claude/pipeline.env`: stop an implementer that has changed no file after this many minutes (0 = off) | `20` |
+| `LONG_RUN_MINUTES` | In `.claude/pipeline.env`: warn (never stop) when an implementer run passes this many minutes (0 = off) | `30` |
 | `REPEAT_STOP` | Stop when one tool call repeats, or this many calls are denied; filler text stops at `max(200, 5×)` this (0 = off) | `40` |
 
 ## Conventions the agents share

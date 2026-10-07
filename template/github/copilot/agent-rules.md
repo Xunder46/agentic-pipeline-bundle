@@ -31,16 +31,26 @@ AGENTS.md or CLAUDE.md.
 
 Work: write early. Make your first edit within the first few minutes, from the brief's pointers; read
 further only to finish the item in hand. If a pointer is wrong, say so in your report and continue.
+Do only the items your brief names. If the work turns out to need another phase, or a large file the
+brief did not foresee, stop at a finished item and report what remains: long runs cost the most.
 
 Files: create no scratch or probe files; remove one you made with `{{GATEWAY}} delete-scratch`. Run
 formatters only on files you created, by explicit path. Edit existing files with minimal edits, then
 check them with `{{GATEWAY}} git-diff --stat`: a diff bigger than your edit means undo and report.
 
-Tests: no real-clock thresholds (bracket between timestamps, or poll to a deadline). Every new guard is
-shown red first, or by a mutation: record the original line, change it, see the test fail, restore the
-EXACT original, re-run green; never end a step with a mutation applied. If a change turns an EXISTING
-test red that the plan did not predict, stop and report; do not edit that test. If a step's text
-contradicts the plan's decisions, follow the decisions and log it in the Assumption Log.
+Tests: no real-clock thresholds (bracket between timestamps, or poll to a deadline). Prove every new or
+changed guard with the gateway, not by your own account: `{{GATEWAY}} prove-red HEAD test <test files>`
+(or the base commit your brief names) runs your tests on the code without your change. It must say RED
+AT, with an assertion failing for the reason the test guards; GREEN AT means the test proves nothing,
+so strengthen it before you finish. Where the test cannot even compile without the change (new code),
+use a mutation: record the original line, change it, see the test fail, restore the EXACT original,
+re-run green; never end a step with a mutation applied. Paste the prove-red verdict lines in the
+evidence file.
+While working, run only the test files you touched (by path, or a filter); run the full suite once when
+you believe you are done, and again only after a fix. Run another suite (a native or package suite)
+only if this run changed its sources.
+If a change turns an EXISTING test red that the plan did not predict, stop and report; do not edit that
+test. If a step's text contradicts the plan's decisions, follow the decisions and log it in the Assumption Log.
 
 Plan: update the plan's Progress table (one line per item) and Assumption Log as phases complete; put
 baselines, suite outputs and red/green tables in the plan's .evidence.md, never in the plan.
@@ -50,12 +60,15 @@ project invariant checks clean ({{INVARIANT_CHECKS}}), and the plan's own residu
 
 ## Reviewer (code-reviewer)
 
-Create the plan's .review.md first, then append each finding as you find it. Run the full
+Create the plan's .review.md first, then append each finding as you find it. Spot-check the guards the
+change adds with `{{GATEWAY}} prove-red <base commit> test <test files>`: a guard that is GREEN AT the
+base proves nothing and is a critical finding. Run the full
 `{{GATEWAY}} test` once and paste the counts; read the diff with `{{GATEWAY}} git-diff`, one file at a
 time, once each.
 
 ## Planners (conductor, conductor-v2)
 
 Write only at the paths your brief gives. Every phase item names its file and the symbol (function,
-class or test) it changes, so implementers can start editing without research. Do not measure or
+class or test) it changes, so implementers can start editing without research. No phase has more than
+8 items: split a bigger one into part A and part B (each is one agent run). Do not measure or
 maintain line counts.

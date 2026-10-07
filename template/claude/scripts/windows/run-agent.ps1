@@ -62,6 +62,7 @@ $MaxRunMinutes = [int](Get-Setting 'MAX_RUN_MINUTES' '120')
 $StallMinutes = [int](Get-Setting 'STALL_MINUTES' '30')
 $RepeatStop = [int](Get-Setting 'REPEAT_STOP' '40')
 $NoWriteStop = [int](Get-Setting 'NO_WRITE_STOP' '20')   # stop an implementer that has changed no file after this long; 0 = off
+$LongRunMinutes = [int](Get-Setting 'LONG_RUN_MINUTES' '30')   # warn when an implementer run passes this long; 0 = off
 $HungChildMinutes = [int](Get-Setting 'HUNG_CHILD_MINUTES' '10')
 # The macOS wrapper name maps to its Windows counterpart.
 if ($CopilotWrapper -eq 'with-opencode.sh') { $CopilotWrapper = 'with-opencode.ps1' }
@@ -342,6 +343,11 @@ function Write-Health([string]$dir) {
   "  TOP_READ: $($st.Read)x `"$($st.ReadKey)`" (one file, any line range)"
   if ((Test-Implementer (Read-Text (Join-Path $dir 'agent'))) -and (Test-NoWriteYet $dir) -and -not (Test-Path (Join-Path $dir 'exit'))) {
     "  FIRST_WRITE: none yet after $(Get-MinutesSince ([long](Read-Text (Join-Path $dir 'started_epoch')))) min (auto-stop at $NoWriteStop; 0 = off)"
+  }
+  # Runs over ~30 minutes cost the most and are where scope piles up. Not stopped: split next time.
+  $elapsed = ((Get-Now) - [long](Read-Text (Join-Path $dir 'started_epoch'))) / 60.0
+  if ($LongRunMinutes -gt 0 -and -not (Test-Path (Join-Path $dir 'exit')) -and (Test-Implementer (Read-Text (Join-Path $dir 'agent'))) -and $elapsed -ge $LongRunMinutes) {
+    "  LONG_RUN: $('{0:N1}' -f $elapsed) min, past $LongRunMinutes; split the remaining work into its own run next time"
   }
   $proxy = Join-Path $dir 'proxy.log'
   if (Test-Path $proxy) {
