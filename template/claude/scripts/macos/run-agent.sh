@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Runs a GitHub Copilot CLI custom agent in the background, waits for it, and prints a compact
-# summary (status, changed files, health, log tail) for the governing Claude Code session.
-#   bash .claude/scripts/macos/run-agent.sh start  <agent> <prompt-file> [model]
-#   bash .claude/scripts/macos/run-agent.sh wait   <RUN_ID>     (blocks up to WAIT_MINUTES)
+# Runs a GitHub Copilot CLI custom agent in the background and prints a compact summary (status,
+# changed files, health, log tail) for the governing Claude Code session.
+#   bash .claude/scripts/macos/run-agent.sh start  <agent> <prompt-file> [model]   (returns at once)
+#   bash .claude/scripts/macos/run-agent.sh wait   <RUN_ID>     (blocks up to WAIT_MINUTES; run it in the background)
 #   bash .claude/scripts/macos/run-agent.sh status <RUN_ID>     (returns at once)
 #   bash .claude/scripts/macos/run-agent.sh stop   <RUN_ID>
 #   bash .claude/scripts/macos/run-agent.sh list
@@ -53,7 +53,7 @@ load_config() {
   : "${NO_WRITE_STOP:=20}"        # stop an implementer that has changed no file after this long; 0 = off
   : "${LONG_RUN_MINUTES:=30}"     # warn when an implementer run passes this long (one concern per run); 0 = off
   : "${COPILOT_NO_CUSTOM_INSTRUCTIONS:=1}"  # 1 = agents do not auto-load AGENTS.md / CLAUDE.md (see worker)
-  : "${COPILOT_REASONING_EFFORT=max}"     # none|minimal|low|medium|high|xhigh|max; empty = model default
+  : "${COPILOT_REASONING_EFFORT=}"        # none|minimal|low|medium|high|xhigh|max; empty = model default
   case "$COPILOT_REASONING_EFFORT" in ""|none|minimal|low|medium|high|xhigh|max) ;;
     *) echo "COPILOT_REASONING_EFFORT must be empty or one of none|minimal|low|medium|high|xhigh|max (got '$COPILOT_REASONING_EFFORT')" >&2; exit 2 ;;
   esac
@@ -522,7 +522,10 @@ list_runs() {
 cmd="${1:-}"
 if [[ $# -gt 0 ]]; then shift; fi
 case "$cmd" in
-  start)    if [[ $# -lt 2 ]]; then usage; fi; id="$(start_run "$@")"; wait_run "$id" ;;
+  # start returns at once: a governor that forgets to background the call loses seconds, not the
+  # session (a foreground wait blocks it for up to WAIT_MINUTES and stopping it kills the agent).
+  start)    if [[ $# -lt 2 ]]; then usage; fi; id="$(start_run "$@")"
+            printf 'RUN_ID: %s\nSTATUS: STARTED\nNEXT: Started. Wait for it in the background (run_in_background: true): bash %s wait %s\n' "$id" "${SCRIPT#"$REPO_ROOT"/}" "$id" ;;
   wait)     if [[ $# -ne 1 ]]; then usage; fi; wait_run "$1" ;;
   status)   if [[ $# -ne 1 ]]; then usage; fi; d="$(run_dir_for "$1")"; check_health "$d"; summary "$1" ;;
   stop)     if [[ $# -ne 1 ]]; then usage; fi; stop_run "$1" user ;;

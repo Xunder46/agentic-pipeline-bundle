@@ -95,22 +95,24 @@ for r in long healthy rev; do kill "$(cat .work/runs/$r/pid)" 2> /dev/null; done
 printf '#!/bin/bash\nwhile [[ $# -gt 0 ]]; do if [[ $1 == -p ]]; then printf "%%s\\n" "$2"; shift; else printf "ARG %%s\\n" "$1"; fi; shift; done\n' > stub.sh; chmod +x stub.sh
 printf '\n- `./slow.sh` hangs for 30 s: never run it twice.\n' >> AGENTS.md
 mkdir -p .work/t; echo "Do X." > .work/t/brief.md
-COPILOT_BIN="$PWD/stub.sh" COPILOT_WRAPPER= bash $R start developer .work/t/brief.md > /dev/null 2>&1
+out=$(COPILOT_BIN="$PWD/stub.sh" COPILOT_WRAPPER= bash $R start developer .work/t/brief.md 2>&1)
+ok "start returns at once" "$(echo "$out" | sed -n 's/^STATUS: //p')" "STARTED"
+bash $R wait "$(cat .work/runs/latest.txt)" > /dev/null 2>&1
 o=.work/runs/$(cat .work/runs/latest.txt)/output.log
 ok "rules injected for an implementer" "$(grep -c '^## Implementers' "$o")" "1"
 ok "no unresolved placeholder in the prompt" "$(grep -c '{{' "$o")" "0"
 ok "agents run with --no-custom-instructions" "$(grep -c '^ARG --no-custom-instructions$' "$o")" "1"
-ok "reasoning effort defaults to max" "$(grep -A1 '^ARG --reasoning-effort$' "$o" | tail -1)" "ARG max"
+ok "reasoning effort is unset by default (model default)" "$(grep -c '^ARG --reasoning-effort$' "$o")" "0"
 ok "built-in GitHub MCP server disabled" "$(grep -c '^ARG --disable-builtin-mcps$' "$o")" "1"
 ok "usage written to the run folder" "$(grep -c '^ARG --usage-output-file$' "$o")" "1"
 ok "AGENTS.md known hangs injected into the prompt" "$(grep -c 'slow.sh. hangs for 30 s' "$o")" "1"
-COPILOT_NO_CUSTOM_INSTRUCTIONS=0 COPILOT_BIN="$PWD/stub.sh" COPILOT_WRAPPER= bash $R start developer .work/t/brief.md > /dev/null 2>&1
+COPILOT_NO_CUSTOM_INSTRUCTIONS=0 COPILOT_BIN="$PWD/stub.sh" COPILOT_WRAPPER= bash $R start developer .work/t/brief.md > /dev/null 2>&1; bash $R wait "$(cat .work/runs/latest.txt)" > /dev/null 2>&1
 o=.work/runs/$(cat .work/runs/latest.txt)/output.log
 ok "COPILOT_NO_CUSTOM_INSTRUCTIONS=0 turns it off" "$(grep -c '^ARG --no-custom-instructions$' "$o")" "0"
 COPILOT_REASONING_EFFORT=bogus bash $R start developer .work/t/brief.md > /dev/null 2>&1; ok "an invalid reasoning effort is refused" "$?" "2"
-COPILOT_REASONING_EFFORT= COPILOT_BIN="$PWD/stub.sh" COPILOT_WRAPPER= bash $R start developer .work/t/brief.md > /dev/null 2>&1
+COPILOT_REASONING_EFFORT=max COPILOT_BIN="$PWD/stub.sh" COPILOT_WRAPPER= bash $R start developer .work/t/brief.md > /dev/null 2>&1; bash $R wait "$(cat .work/runs/latest.txt)" > /dev/null 2>&1
 o=.work/runs/$(cat .work/runs/latest.txt)/output.log
-ok "empty reasoning effort passes no flag" "$(grep -c '^ARG --reasoning-effort$' "$o")" "0"
+ok "a set reasoning effort is passed" "$(grep -A1 '^ARG --reasoning-effort$' "$o" | tail -1)" "ARG max"
 echo "stats"
 st_out="$(bash .claude/scripts/macos/pipeline-stats.sh --since "$(date -v-1H '+%Y-%m-%d %H:%M' 2>/dev/null || date -d '-1 hour' '+%Y-%m-%d %H:%M')" --until "$(date -v+1H '+%Y-%m-%d %H:%M' 2>/dev/null || date -d '+1 hour' '+%Y-%m-%d %H:%M')" 2>&1)"
 ok "pipeline-stats reports the window's runs" "$(echo "$st_out" | grep -c '^Runs: ')" "1"

@@ -180,7 +180,10 @@ run, create the new directories and make the file deletions the phase's Predicte
 `.work/<slug>/brief-<agent>-<phase>.md` with only what is specific to the run: the approved plan path;
 the plan sections to read (decisions, scenarios, this phase); "implement the plan exactly, test-first
 from the scenario register"; and **code pointers**: for each item, the file and the symbol to change,
-with an approximate line, collected while you validated the plan. Never paste standing rules into a
+with an approximate line, collected while you validated the plan. For an item that changes existing
+logic, paste the current lines it changes (up to about 20) into the brief: every run stopped for not
+writing (three so far) had pointers by file and line only, and each re-brief with the code written out
+wrote files within minutes. Never paste standing rules into a
 brief: the runner appends `.github/copilot/agent-rules.md` (see Standing agent rules). After the run,
 carry out the "Governor actions" the agent listed (deletions, directories) when they are in the
 plan's scope; log the rest as friction.
@@ -255,16 +258,15 @@ Do not merge.
 
 ## Running agents
 
-Start a run: `{{RUNNER}} start <agent> .work/<slug>/<brief>.md [model]`
-
-Always run `start` and `wait` with the Bash tool's `run_in_background: true`. A foreground call
-blocks the whole session until the agent finishes or the check-in interval passes, so the user cannot
-reach you, and stopping the call kills the agent. When the background command exits you are re-invoked
+Start a run: `{{RUNNER}} start <agent> .work/<slug>/<brief>.md [model]`. It returns at once with
+the RUN_ID. Then wait: `{{RUNNER}} wait <RUN_ID>`, always with the Bash tool's
+`run_in_background: true`. A foreground wait blocks the whole session until the agent finishes or the
+check-in interval passes, so the user cannot reach you, and stopping the call kills the agent. When the background command exits you are re-invoked
 with its output; until then, answer the user normally ("is it running?" →
 `{{RUNNER}} status <RUN_ID>`, which returns at once). Never stop a background run
 unless the user asks or a limit is hit. Do not poll.
 
-The runner returns at the check-in interval (`WAIT_MINUTES` in `.claude/pipeline.env`) or when the agent
+`wait` returns at the check-in interval (`WAIT_MINUTES` in `.claude/pipeline.env`) or when the agent
 finishes, and prints a summary. Read STATUS:
 - `DONE` → use FILES_CHANGED_DURING_RUN and the log tail.
 - `RUNNING` → read the HEALTH block (below), then `{{RUNNER}} wait <RUN_ID>`.

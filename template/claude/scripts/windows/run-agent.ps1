@@ -3,8 +3,8 @@ Runs a GitHub Copilot CLI agent in the background, waits for it, and prints a co
 (status, changed files, health, log tail) for the governing Claude Code session. Windows edition of
 .claude/scripts/macos/run-agent.sh — same commands, same summary format.
 
-  pwsh -NoProfile -File .claude/scripts/windows/run-agent.ps1 start  <agent> <prompt-file> [model]
-  pwsh -NoProfile -File .claude/scripts/windows/run-agent.ps1 wait   <RUN_ID>
+  pwsh -NoProfile -File .claude/scripts/windows/run-agent.ps1 start  <agent> <prompt-file> [model]   (returns at once)
+  pwsh -NoProfile -File .claude/scripts/windows/run-agent.ps1 wait   <RUN_ID>   (run it in the background)
   pwsh -NoProfile -File .claude/scripts/windows/run-agent.ps1 status <RUN_ID>
   pwsh -NoProfile -File .claude/scripts/windows/run-agent.ps1 stop   <RUN_ID>
   pwsh -NoProfile -File .claude/scripts/windows/run-agent.ps1 list
@@ -64,7 +64,7 @@ $RepeatStop = [int](Get-Setting 'REPEAT_STOP' '40')
 $NoWriteStop = [int](Get-Setting 'NO_WRITE_STOP' '20')   # stop an implementer that has changed no file after this long; 0 = off
 $LongRunMinutes = [int](Get-Setting 'LONG_RUN_MINUTES' '30')   # warn when an implementer run passes this long; 0 = off
 $NoCustomInstructions = (Get-Setting 'COPILOT_NO_CUSTOM_INSTRUCTIONS' '1') -eq '1'   # agents do not auto-load AGENTS.md / CLAUDE.md
-$ReasoningEffort = Get-Setting 'COPILOT_REASONING_EFFORT' 'max'   # none|minimal|low|medium|high|xhigh|max; empty = model default
+$ReasoningEffort = Get-Setting 'COPILOT_REASONING_EFFORT' ''   # none|minimal|low|medium|high|xhigh|max; empty = model default
 if ($ReasoningEffort -notin '', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max') {
   [Console]::Error.WriteLine("COPILOT_REASONING_EFFORT must be empty or one of none|minimal|low|medium|high|xhigh|max (got '$ReasoningEffort')"); exit 2
 }
@@ -479,7 +479,9 @@ function Show-Runs {
 }
 
 switch ($Command) {
-  'start' { if (-not $Arg1 -or -not $Arg2) { Show-Usage }; $id = Start-Run $Arg1 $Arg2 $Arg3; Wait-Run $id }
+  # start returns at once: a governor that forgets to background the call loses seconds, not the session.
+  'start' { if (-not $Arg1 -or -not $Arg2) { Show-Usage }; $id = Start-Run $Arg1 $Arg2 $Arg3
+            "RUN_ID: $id"; 'STATUS: STARTED'; "NEXT: Started. Wait for it in the background (run_in_background: true): pwsh -NoProfile -File .claude/scripts/windows/run-agent.ps1 wait $id" }
   'wait' { if (-not $Arg1) { Show-Usage }; Wait-Run $Arg1 }
   'status' { if (-not $Arg1) { Show-Usage }; $d = Get-RunDir $Arg1; Update-Health $d; Write-Summary $Arg1 }
   'stop' { if (-not $Arg1) { Show-Usage }; Stop-Run $Arg1 'user' }

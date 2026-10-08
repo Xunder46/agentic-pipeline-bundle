@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.7.0 — 2026-10-08
+
+- **`start` returns at once** with the RUN_ID; `wait` blocks (run it in the background). A governor
+  that loses the "run in the background" rule, for example when its context is compacted, now loses
+  seconds instead of freezing its session for up to `WAIT_MINUTES`.
+- **`COPILOT_REASONING_EFFORT` defaults to unset** (the model's default). Measured on
+  deepseek-v4.1-flash, `max` raised output per request 582 -> 959 tokens (reasoning 372 -> 723) and
+  doubled the uncached share of input: about twice the cost per request, with no visible quality gain.
+- **Briefs quote the code to change**: for an item that changes existing logic, the brief carries the
+  current lines (up to ~20). Every no-write stop so far had file-and-line pointers only, and each
+  re-brief with the code written out wrote files within minutes.
+- First seeded plans: planners kept every seeded entry and raised 2 seed inaccuracies as Open
+  questions; seeded planner runs took 17 and 26 min against 45 min for the last unseeded one.
+
 ## 1.6.0 — 2026-10-07
 
 - **The governor seeds each plan** (`/feature` step 2): it writes the Goal, Decision Ledger, core

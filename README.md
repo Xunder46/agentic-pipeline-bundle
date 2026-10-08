@@ -212,7 +212,8 @@ In the target repo's root. The runner command depends on the OS:
    `pwsh -NoProfile -File .claude/scripts/windows/with-opencode.ps1 copilot -p …`.
 3. **The runner, agents and profiles work end to end:** write `.work/smoke/brief.md` containing "Run
    the gateway's git-status and lint checks, report the results, and change nothing.", then run
-   `<runner> start developer .work/smoke/brief.md`.
+   `<runner> start developer .work/smoke/brief.md`, which returns at once with a RUN_ID, then
+   `<runner> wait <RUN_ID>`.
 
 Expected: `STATUS: DONE` and `FILES_CHANGED_DURING_RUN: (none)`, with the gateway output in the log
 tail. If Copilot says the agent isn't found, run `copilot` once interactively in the repo root and
