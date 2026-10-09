@@ -53,7 +53,7 @@ function Get-Setting([string]$name, [string]$default) {
   if ($FileSettings.ContainsKey($name)) { return $FileSettings[$name] }
   return $default
 }
-$WaitMinutes = [int](Get-Setting 'WAIT_MINUTES' '15')
+$WaitMinutes = [int](Get-Setting 'WAIT_MINUTES' '25')
 $TailLines = [int](Get-Setting 'TAIL_LINES' '40')
 $PollSeconds = [int](Get-Setting 'POLL_SECONDS' '15')
 $CopilotBin = Get-Setting 'COPILOT_BIN' 'copilot'

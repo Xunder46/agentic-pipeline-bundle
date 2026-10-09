@@ -60,7 +60,7 @@ $C['PLATFORM'] = $Platform
 $C['PLANS_ROOT'] = (Cfg 'PLANS_ROOT').TrimEnd('/')
 $C['DOCS_ROOT'] = Cfg 'DOCS_ROOT' 'docs/architecture/'
 $C['DOCS_INDEX'] = Cfg 'DOCS_INDEX' ((Cfg 'DOCS_ROOT').TrimEnd('/') + '/README.md')
-foreach ($pair in @(@('LONG_CMD_TIMEOUT', '300'), @('TEST_TIMEOUT', '900'), @('MAX_AGENT_MINUTES', '90'), @('WAIT_MINUTES', '15'), @('MAX_RUN_MINUTES', '120'), @('STALL_MINUTES', '30'), @('REPEAT_STOP', '40'))) {
+foreach ($pair in @(@('LONG_CMD_TIMEOUT', '300'), @('TEST_TIMEOUT', '900'), @('MAX_AGENT_MINUTES', '90'), @('WAIT_MINUTES', '25'), @('MAX_RUN_MINUTES', '120'), @('STALL_MINUTES', '30'), @('REPEAT_STOP', '40'))) {
   $C[$pair[0]] = Cfg $pair[0] $pair[1]
   if ($C[$pair[0]] -notmatch '^\d+$') { Die "$($pair[0]) must be a whole number (got '$($C[$pair[0]])')" }
 }

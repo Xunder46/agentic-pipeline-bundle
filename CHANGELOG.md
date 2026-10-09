@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.1 — 2026-10-09
+
+- **`WAIT_MINUTES` defaults to 25** (was 15). Every `wait` return wakes the governing Claude session for
+  a full turn, which re-sends the whole session; in a day-long session those turns dominate Claude's
+  cost. The runner stops broken runs by itself (loop, denied, filler, no_write, stalled), so mid-run
+  check-ins add little. Keep it under the Bash timeout in `.claude/settings.json` (60 minutes).
+
 ## 1.7.0 — 2026-10-08
 
 - **`start` returns at once** with the RUN_ID; `wait` blocks (run it in the background). A governor

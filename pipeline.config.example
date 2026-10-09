@@ -69,7 +69,7 @@ GATEWAY_EXTRA="codegen|300|npm run codegen; format|120|npx prettier --write|requ
 
 # ---- Runner (.claude/pipeline.env) ---------------------------------------------------------------
 COPILOT_WRAPPER=""          # "with-opencode.sh" for OpenCode Go/Zen (mapped to .ps1 on Windows); "" otherwise
-WAIT_MINUTES=15             # each start/wait call returns after this many minutes
+WAIT_MINUTES=25             # each wait call returns after this many minutes (each return wakes the governor: a full Claude turn)
 MAX_RUN_MINUTES=120         # hard stop per run (0 = off)
 STALL_MINUTES=30            # stop when log AND diff are idle this long (0 = off)
 REPEAT_STOP=40              # stop when one agent action repeats this often (0 = off)

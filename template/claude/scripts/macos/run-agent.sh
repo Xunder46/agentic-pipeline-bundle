@@ -40,7 +40,7 @@ load_config() {
     done
   fi
   # Keep WAIT_MINUTES below Claude Code's Bash timeout so every call returns on its own.
-  : "${WAIT_MINUTES:=15}"
+  : "${WAIT_MINUTES:=25}"
   : "${TAIL_LINES:=40}"
   : "${POLL_SECONDS:=15}"
   : "${COPILOT_BIN:=copilot}"

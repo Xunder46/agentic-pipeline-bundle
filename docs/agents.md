@@ -122,7 +122,7 @@ agents skip rules about it.
 | Key | Meaning | Default |
 |---|---|---|
 | `COPILOT_WRAPPER` | `with-opencode.sh` (`.ps1` on Windows) for OpenCode Go/Zen; empty otherwise | empty |
-| `WAIT_MINUTES` | Each `start`/`wait` call returns after this long | `15` |
+| `WAIT_MINUTES` | Each `wait` call returns after this long; each return wakes the governor (a full Claude turn), so longer is cheaper. Keep it under the Bash timeout in `.claude/settings.json` | `25` |
 | `MAX_RUN_MINUTES` | Hard stop per run (0 = off) | `120` |
 | `STALL_MINUTES` | Stop when the log and the diff are both idle this long (0 = off) | `30` |
 | `NO_WRITE_STOP` | In `.claude/pipeline.env`: stop an implementer that has changed no file after this many minutes (0 = off) | `20` |
